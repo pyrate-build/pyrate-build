@@ -13,7 +13,15 @@
 #-#  See the License for the specific language governing permissions and
 #-#  limitations under the License.
 
+pyrate_version = (0, 1, 2)
+
 import os, sys
+try:
+	import hashlib
+	md5 = hashlib.md5
+except ImportError:
+	import md5
+	md5 = md5.md5
 
 class ProcessError(Exception):
 	pass
@@ -270,6 +278,13 @@ class External_SWIG(External):
 External.available['swig'] = External_SWIG
 
 
+def get_normed_name(fn, forced_ext, suffix = None):
+	(tmp, ext) = os.path.splitext(fn)
+	if suffix:
+		tmp += '_' + suffix
+	return (tmp + forced_ext, ext.lstrip('.'))
+
+
 class Registry(object):
 	def __init__(self, compiler, platform):
 		(self._compiler, self._platform) = (compiler, platform)
@@ -291,8 +306,10 @@ class Registry(object):
 		return self.rules[name]
 
 	def find_object_target(self, value, compiler_opts):
-		ext = value.split('.')[-1]
-		obj_name = value.replace('.%s' % ext, self._platform.extensions['object'])
+		suffix = ''
+		if compiler_opts:
+			suffix = md5(repr(compiler_opts).encode('ascii')).hexdigest()
+		(obj_name, ext) = get_normed_name(value, self._platform.extensions['object'], suffix)
 		for pn, p in self._compiler.items():
 			if ext in p.handlers:
 				rule_name = p.handlers[ext]
@@ -312,7 +329,7 @@ class TargetManager(object):
 	def __init__(self, compiler, **kwargs):
 		class Platform(object):
 			def __init__(self):
-				self.extensions = {'object': '.o', 'shared': '.so', 'static': '.a'}
+				self.extensions = {'object': '.o', 'shared': '.so', 'static': '.a', 'exe': ''}
 		self.platform = Platform()
 		self.registry = Registry(compiler, self.platform)
 
@@ -337,14 +354,12 @@ class TargetManager(object):
 		return self.registry.register_target(target)
 
 	def static_library(self, lib_name, inputs, linker_opts = None, compiler_opts = None, **kwargs):
-		if not lib_name.endswith(self.platform.extensions['static']):
-			lib_name += self.platform.extensions['static']
+		(lib_name, ext) = get_normed_name(lib_name, self.platform.extensions['static'])
 		return self.create_target(lib_name, 'link_static', inputs, linker_opts, compiler_opts,
 			on_use_inputs = {None: [lib_name]}, **kwargs)
 
 	def shared_library(self, lib_name, inputs, linker_opts = None, compiler_opts = None, **kwargs):
-		if not lib_name.endswith(self.platform.extensions['shared']):
-			lib_name += self.platform.extensions['shared']
+		(lib_name, ext) = get_normed_name(lib_name, self.platform.extensions['shared'])
 		link_name = lib_name
 		if lib_name.startswith('lib'):
 			link_name = link_name[3:]
@@ -352,8 +367,10 @@ class TargetManager(object):
 			on_use_flags = {None: {'opts': '-L. -l%s' % link_name}},
 			on_use_deps = {None: [lib_name]}, **kwargs)
 
-	def executable(self, name, inputs, linker_opts = None, compiler_opts = None, **kwargs):
-		return self.create_target(name, 'link_exe', inputs, linker_opts, compiler_opts, **kwargs)
+	def executable(self, exe_name, inputs, linker_opts = None, compiler_opts = None, **kwargs):
+		if not exe_name.endswith(self.platform.extensions['exe']):
+			exe_name += self.platform.extensions['exe']
+		return self.create_target(exe_name, 'link_exe', inputs, linker_opts, compiler_opts, **kwargs)
 
 	def write(self):
 		return (self.registry.rules, self.registry.targets)
@@ -364,7 +381,7 @@ def generate_build_file(bfn, ofn):
 	tm = TargetManager(compiler)
 	compiler['C++'] = Delayed(External_GCC, tm)
 	exec_globals = {
-		'pyrate_version': (0, 1, 1),
+		'pyrate_version': pyrate_version,
 		'default': None,
 		'match': match,
 		'version': VersionComparison(),

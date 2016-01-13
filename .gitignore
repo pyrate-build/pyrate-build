@@ -1,1 +1,7 @@
+*.a
+dist
+*.egg-info
+.ninja_*
 *.ninja
+*.o
+*.so
