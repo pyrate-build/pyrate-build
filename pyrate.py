@@ -69,11 +69,12 @@ def match(value, dn = '.'):
 	for fn in os.listdir(dn):
 		accept = False
 		for token in value.split():
-			if not fnmatch.fnmatch(fn, token.lstrip('-')):
+			negate = token.startswith('-')
+			if negate:
+				token = token[1:]
+			if not fnmatch.fnmatch(fn, token):
 				continue
-			accept = True
-			if token.startswith('-'):
-				accept = False
+			accept = not negate
 		if accept:
 			result.append(fn)
 	return result
@@ -270,8 +271,8 @@ External.available['swig'] = External_SWIG
 
 
 class Registry(object):
-	def __init__(self, platform):
-		self._platform = platform
+	def __init__(self, compiler, platform):
+		(self._compiler, self._platform) = (compiler, platform)
 		try:
 			import collections
 			dict_cls = collections.OrderedDict
@@ -283,7 +284,7 @@ class Registry(object):
 
 	def find_rule(self, name):
 		if name not in self.rules:
-			for pn, p in self._platform.items():
+			for pn, p in self._compiler.items():
 				for r in p.rules:
 					if r.name == name:
 						return self.register_rule(r)
@@ -291,8 +292,8 @@ class Registry(object):
 
 	def find_object_target(self, value, compiler_opts):
 		ext = value.split('.')[-1]
-		obj_name = value.replace('.%s' % ext, '.o')
-		for pn, p in self._platform.items():
+		obj_name = value.replace('.%s' % ext, self._platform.extensions['object'])
+		for pn, p in self._compiler.items():
 			if ext in p.handlers:
 				rule_name = p.handlers[ext]
 				target = BuildTarget(obj_name, self.find_rule(rule_name),
@@ -308,8 +309,12 @@ class Registry(object):
 
 
 class TargetManager(object):
-	def __init__(self, platform, **kwargs):
-		self.registry = Registry(platform)
+	def __init__(self, compiler, **kwargs):
+		class Platform(object):
+			def __init__(self):
+				self.extensions = {'object': '.o', 'shared': '.so', 'static': '.a'}
+		self.platform = Platform()
+		self.registry = Registry(compiler, self.platform)
 
 	def sort_inputs(self, input_list, compiler_opts):
 		if isinstance(input_list, str):
@@ -331,15 +336,20 @@ class TargetManager(object):
 			self.sort_inputs(inputs, compiler_opts) + [Environment(opts = linker_opts)], **kwargs)
 		return self.registry.register_target(target)
 
-	def static_library(self, name, inputs, linker_opts = None, compiler_opts = None, **kwargs):
-		lib_name = name.rstrip('.a') + '.a'
+	def static_library(self, lib_name, inputs, linker_opts = None, compiler_opts = None, **kwargs):
+		if not lib_name.endswith(self.platform.extensions['static']):
+			lib_name += self.platform.extensions['static']
 		return self.create_target(lib_name, 'link_static', inputs, linker_opts, compiler_opts,
 			on_use_inputs = {None: [lib_name]}, **kwargs)
 
-	def shared_library(self, name, inputs, linker_opts = None, compiler_opts = None, **kwargs):
-		lib_name = name.rstrip('.so') + '.so'
+	def shared_library(self, lib_name, inputs, linker_opts = None, compiler_opts = None, **kwargs):
+		if not lib_name.endswith(self.platform.extensions['shared']):
+			lib_name += self.platform.extensions['shared']
+		link_name = lib_name
+		if lib_name.startswith('lib'):
+			link_name = link_name[3:]
 		return self.create_target(lib_name, 'link_shared', inputs, linker_opts, compiler_opts,
-			on_use_flags = {None: {'opts': '-L. -l%s' % name.lstrip('lib')}},
+			on_use_flags = {None: {'opts': '-L. -l%s' % link_name}},
 			on_use_deps = {None: [lib_name]}, **kwargs)
 
 	def executable(self, name, inputs, linker_opts = None, compiler_opts = None, **kwargs):
@@ -354,7 +364,7 @@ def generate_build_file(bfn, ofn):
 	tm = TargetManager(compiler)
 	compiler['C++'] = Delayed(External_GCC, tm)
 	exec_globals = {
-		'pyrate_version': (0, 1, 0),
+		'pyrate_version': (0, 1, 1),
 		'default': None,
 		'match': match,
 		'version': VersionComparison(),

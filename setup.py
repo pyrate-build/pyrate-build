@@ -1,13 +1,14 @@
 #!/usr/bin/env python
 from setuptools import setup, find_packages
 
+version = '0.1.1'
 setup(
 	name='pyrate-build',
-	version='0.1.0',
+	version=version,
 	description='A small python based build file generator targeting ninja',
 	long_description=open('README.rst').read(),
 	url='https://github.com/pyrate-build/pyrate-build',
-	download_url = 'https://github.com/pyrate-build/pyrate-build/tarball/0.1.0',
+	download_url = 'https://github.com/pyrate-build/pyrate-build/tarball/' + version,
 	author='Fred Stober',
 	author_email='fred.stober@gmx.de',
 	license='License :: OSI Approved :: Apache Software License',
