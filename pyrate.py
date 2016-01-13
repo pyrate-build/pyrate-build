@@ -13,7 +13,7 @@
 #-#  See the License for the specific language governing permissions and
 #-#  limitations under the License.
 
-pyrate_version = (0, 1, 2)
+pyrate_version = (0, 1, 3)
 
 import os, sys
 try:
@@ -360,7 +360,7 @@ class TargetManager(object):
 
 	def shared_library(self, lib_name, inputs, linker_opts = None, compiler_opts = None, **kwargs):
 		(lib_name, ext) = get_normed_name(lib_name, self.platform.extensions['shared'])
-		link_name = lib_name
+		link_name = lib_name.replace(self.platform.extensions['shared'], '')
 		if lib_name.startswith('lib'):
 			link_name = link_name[3:]
 		return self.create_target(lib_name, 'link_shared', inputs, linker_opts, compiler_opts,
