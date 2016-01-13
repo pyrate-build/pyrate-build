@@ -404,7 +404,7 @@ def main():
 
 	if os.path.dirname(bfn):
 		os.chdir(os.path.dirname(bfn))
-	generate_build_file(bfn, ofn)
+	generate_build_file(os.path.basename(bfn), ofn)
 
 if __name__ == '__main__':
 	main()

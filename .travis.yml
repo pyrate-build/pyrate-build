@@ -11,8 +11,8 @@ before_install:
   - pip install codecov
   - pip install 'coverage<4'
 script:
-  - coverage run ./pyrate --output build1.ninja example1.py
-  - coverage run ./pyrate --output build2.ninja example2.py
-  - cat build1.ninja build2.ninja
+  - coverage run ./pyrate --output build1.ninja examples/example1.py
+  - coverage run ./pyrate --output build2.ninja examples/example2.py
+  - cat examples/build1.ninja examples/build2.ninja
 after_success:
   - codecov

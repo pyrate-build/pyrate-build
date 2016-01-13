@@ -3,8 +3,7 @@
 pyrate
 ======
 
-**pyrate** is a small python based build file generator targeting
-`ninja(s)`_.
+**pyrate** is a small python based build file generator targeting `ninja(s)`_.
 
 It allows to describe the build process of small projects in a very simple way.
 This description is then turned into ninja build files, that enable a very quick turnaround of project builds.
@@ -15,10 +14,9 @@ Installation
 **pyrate** is very easy to deploy - there are no particular installation steps to use it!
 It can even board the project directory of your project and simply get called from there.
 The only dependency of the software is having a working python installation.
-**pyrate** should work without modifications with all python versions between 2.4 and 3.4.
+**pyrate** should work out of the box with all python versions between 2.4 and 3.4.
 
-It is also possible to get the latest version from the Python Package
-Index with:
+It is also possible to get the latest version from the Python Package Index with:
 
 .. code:: sh
 
@@ -32,7 +30,7 @@ and the optional parameter ‘–output’ to specify the name of the generated 
 
 .. code:: sh
 
-    pyrate.py --output mybuild.ninja mybuild.py
+    pyrate --output mybuild.ninja mybuild.py
 
 When the script is started, it first changes the current directory to the directory
 containing the build configuration script, so all path names are relative to it.
@@ -43,7 +41,7 @@ starting the build config script with:
 
 .. code:: python
 
-    #!/usr/bin/env pyrate.py
+    #!/usr/bin/env pyrate
 
 Syntax
 ------
@@ -143,19 +141,21 @@ that uses the dynamic library.
 
 .. code:: python
 
-    compiler['C++'] = find_external('clang', version >= 3.7, std = 'c++11')
+    clang = find_external('clang', version >= 3.7, std = 'c++11')
+    if clang:
+        compiler['C++'] = clang
 
-    libFiles = match("*.cpp -test* -mylib.cpp")
-    static_library('libUser', libFiles, compiler_opts = '-O3')
-    libUser = shared_library('libUser', libFiles)
+    lib_files = match("*.cpp -test* -mylib.cpp")
+    static_library('libFoo', lib_files, compiler_opts = '-O3')
+    lib_reference = shared_library('libFoo', lib_files)
 
-    python = find_external('python')
+    python = find_external('python', version > 2)
     swig = find_external('swig')
     if swig and python:
-            swig.wrapper('python', 'mylib', 'mylib.i', libs = [libUser])
+        swig.wrapper('python', 'mylib', 'mylib.i', libs = [lib_reference])
 
     for fn in match("test*.cpp"):
-            executable(fn.replace('.cpp', '.exe'), [fn, libUser])
+        executable(fn.replace('.cpp', '.exe'), [fn, lib_reference])
 
 
 .. _ninja(s): https://github.com/ninja-build/ninja
@@ -163,6 +163,7 @@ that uses the dynamic library.
 .. |PyPI Version| image:: https://badge.fury.io/py/pyrate-build.svg
    :target: https://badge.fury.io/py/pyrate-build
    :alt: Latest PyPI version
+
 .. |Build Status| image:: https://travis-ci.org/pyrate-build/pyrate-build.svg?branch=master
    :target: https://travis-ci.org/pyrate-build/pyrate-build
    :alt: Build Status
