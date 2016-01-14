@@ -13,7 +13,7 @@
 #-#  See the License for the specific language governing permissions and
 #-#  limitations under the License.
 
-pyrate_version = (0, 1, 4)
+pyrate_version = (0, 1, 5)
 
 import os, sys
 try:
@@ -388,13 +388,13 @@ class Registry(object):
 		for target in self.target_list:
 			if len(set(target_collisions.get(target.name, []))) != 1:
 				(root, ext) = os.path.splitext(target.name)
-				target.name = root + '_' + md5(repr(target.get_key())).hexdigest() + ext
+				target.name = root + '_' + md5(repr(target.get_key()).encode('ascii')).hexdigest() + ext
 
 		rules_unique = {}
 		# identify rules with a fixed set of parameters to fold them into the rule definition
 		for rule_name, opts_of_targets in rules_used.items():
 			if len(opts_of_targets) == 1: # the rule 'rule_name' is always called with the same opts
-				target_opts, targets = opts_of_targets.items()[0]
+				target_opts, targets = list(opts_of_targets.items())[0]
 				if target_opts and (len(targets) > 1): # ignore if the rule is only called once anyway
 					for target in targets:
 						target.build_rule.name += '_' + md5(target_opts).hexdigest()
@@ -479,6 +479,18 @@ class Context(object):
 			linker_opts, compiler_opts, **kwargs)
 
 
+def create_ctx(**kwargs):
+	platform = kwargs.pop('platform', ctx.platform)
+	compiler = kwargs.pop('compiler', ctx.compiler)
+	return Context(registry, platform, compiler, **kwargs)
+
+
+def default_ctx_call(exec_dict, fun, keyword_only = False):
+	if keyword_only:
+		return lambda **kwargs: fun(exec_dict['default_context'], **kwargs)
+	return lambda *args, **kwargs: fun(exec_dict['default_context'], *args, **kwargs)
+
+
 def generate_build_file(bfn, ofn):
 	class Platform(object):
 		def __init__(self):
@@ -488,30 +500,23 @@ def generate_build_file(bfn, ofn):
 	registry = Registry()
 	ctx = Context(registry, platform, compiler)
 	compiler['C++'] = Delayed(External_GCC, ctx)
-	def default_ctx_call(fun, keyword_only = False):
-		if keyword_only:
-			return lambda **kwargs: fun(exec_globals['default_context'], **kwargs)
-		return lambda *args, **kwargs: fun(exec_globals['default_context'], *args, **kwargs)
-	def create_ctx(**kwargs):
-		platform = kwargs.pop('platform', ctx.platform)
-		compiler = kwargs.pop('compiler', ctx.compiler)
-		return Context(registry, platform, compiler, **kwargs)
-	exec_globals = {
+	exec_globals = {}
+	exec_globals.update({
 		'pyrate_version': pyrate_version,
 		'compiler': compiler,
 		'default': None,
 		'default_context': ctx,
 		'match': match,
 		'version': VersionComparison(),
-		'find_external': default_ctx_call(Context.find_external),
-		'get_rule': default_ctx_call(Context.get_rule),
-		'executable': default_ctx_call(Context.executable),
-		'shared_library': default_ctx_call(Context.shared_library),
-		'static_library': default_ctx_call(Context.static_library),
-		'BuildSource': default_ctx_call(BuildSource, keyword_only = True),
+		'find_external': default_ctx_call(exec_globals, Context.find_external),
+		'get_rule': default_ctx_call(exec_globals, Context.get_rule),
+		'executable': default_ctx_call(exec_globals, Context.executable),
+		'shared_library': default_ctx_call(exec_globals, Context.shared_library),
+		'static_library': default_ctx_call(exec_globals, Context.static_library),
+		'BuildSource': default_ctx_call(exec_globals, BuildSource, keyword_only = True),
 		'Context': create_ctx,
 		'InputFile': InputFile,
-	}
+	})
 
 	with open(bfn) as bfp:
 		exec(bfp.read(), exec_globals)

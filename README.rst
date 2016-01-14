@@ -94,7 +94,7 @@ object files, executables or libraries. An instance of such a build context is c
 -  ``Context(...)`` - the most important parameters are:
 
    * ``implicit_input``, ``implicit_object_input``, ``implicit_static_library_input``,
-    ``implicit_shared_library_input`` and ``implicit_executable_input``
+     ``implicit_shared_library_input`` and ``implicit_executable_input``
 
 This context instance also provides member functions with the same syntax as the global functions
 described above. The default context used by these global function can be set using the variable:
