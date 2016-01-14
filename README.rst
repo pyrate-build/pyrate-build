@@ -8,10 +8,26 @@ pyrate
 It allows to describe the build process of small projects in a very simple way.
 This description is then turned into ninja build files, that enable a very quick turnaround of project builds.
 
+Quick HOWTO
+-----------
+
+The following presents the necessary steps to quickly test the waters with this tool. These commands will
+install **pyrate**, generate the ninja build file, build and execute a small executable:
+
+.. code:: sh
+
+    pip install pyrate-build
+    echo -e '#include <iostream>\nvoid main() { std::cout << "Ahoy World! << std::endl; }' > test.cpp
+    echo -e 'executable('test', ['test.cpp'])' > build.py
+    pyrate build.py
+    ninja
+    ./test
+
 Installation
 ------------
 
-**pyrate** is very easy to deploy - there are no particular installation steps to use it!
+**pyrate** is very easy to deploy - there are no particular installation steps to use it
+once the single script ``pyrate.py`` is available somewhere.
 It can even board the project directory of your project and simply get called from there.
 The only dependency of the software is having a working python installation.
 **pyrate** should work out of the box with all python versions between 2.4 and 3.4.
@@ -52,19 +68,40 @@ available as global variables to ease the configuration of the build process.
 -  ``match(selector, dir_name = '.')``
 
 The function *match* allows to select files from a directory using a string consisting of
-black / whilelisting pathname patterns.
+black / white listing path name patterns.
 The selector ``'*.cpp -test*.cpp test3.cpp *.h'`` for example selects all files ending with
 ‘.h’ and ‘.cpp’, with the exception of those ‘.cpp’ files that start with ‘test’ and are not
 called ‘test3.cpp’.
 
-There are three helper functions to define executables and libraries based on
+There are four global helper functions to define object files, executables and libraries based on
 a list of inputs (which can be files, other targets or externals)
 
 -  ``executable(name, input_list, linker_opts = None, compiler_opts = None)``
 -  ``shared_library(name, input_list, linker_opts = None, compiler_opts = None)``
 -  ``static_library(name, input_list, linker_opts = None, compiler_opts = None)``
+-  ``object_file(name, input_list, compiler_opts = None)``
 
-By default, all targets that are defined by these functions (or direct API calls) are built.
+The input list may contain:
+
+-  strings (file names that are processed according to the rules specified by the packages in the ``compiler`` dictionary),
+-  build targets (as returned by these functions themselves) or
+-  external dependencies (retrieved using ``find_external`` or explicitly defined).
+
+The above functions run as part of a so called build context, which allows for example
+to define implicit dependencies that are automatically included in all generated
+object files, executables or libraries. An instance of such a build context is created with:
+
+-  ``Context(...)`` - the most important parameters are:
+
+   * ``implicit_input``, ``implicit_object_input``, ``implicit_static_library_input``,
+    ``implicit_shared_library_input`` and ``implicit_executable_input``
+
+This context instance also provides member functions with the same syntax as the global functions
+described above. The default context used by these global function can be set using the variable:
+
+-  ``default_context = Context(...)``
+
+By default, all targets that are defined by the above functions (or direct API calls) are built.
 In order to select these default targets, the global variable *default* can be set to a list
 of targets
 
@@ -85,7 +122,7 @@ A common argument for this function is a version selector, that is supplied thro
 The comparisons with this variable (eg. ``version >= 4.1``) will create new version instance
 that is used by the external package finder. This allows for example to write
 ``find_external('clang', version >= 3.5)`` to discover a clang installation with version 3.5 or later.
-Currently only a small number of builtin external packages are available (listed under **Externals**),
+Currently only a small number of built in external packages are available (listed under **Externals**),
 but it is easy to add new packages that are recognized.
 
 Finally, the used default compilers can be configured via the global variable
@@ -98,7 +135,7 @@ and parameters that are used to build the source.
 Externals
 ---------
 
-Currently the following builtin externals are supported (listed with
+Currently the following built in externals are supported (listed with
 possible ``find_external`` arguments):
 
 - gcc
@@ -115,6 +152,8 @@ possible ``find_external`` arguments):
   * ``compiler_flags`` - flags that are used during the compilation stage
   * ``static_flags``, ``shared_flags``, ``exe_flags`` - flags that are used during the linking stage
 
+  * ``version`` - specifies required version (eg. ``version >= 2.6``)
+
 - python
 
   * ``version`` - specifies required version (eg. ``version >= 2.6``)
@@ -124,20 +163,25 @@ possible ``find_external`` arguments):
   * ``version`` - specifies required version (eg. ``version > '3.0.2'``)
   * ``wrapper(target_language, library_name, interface_filename, libs = [<targets>...])``
 
+- pthread - posix thread library
+
+
 Example
 -------
 
-A trivial example for a C++ project is the following build configuration
-file:
+The basic **pyrate** build configuration file for a simple C++ project with a single source file
+producing a single executable looks like this:
 
 .. code:: python
 
     executable('test', ['test.cpp'])
 
-The following is a more complicated example that overrides the default compiler,
-defines a native static and dynamic library and several executables.
-In case the swig and python package are found, it also creates a python interface
-that uses the dynamic library.
+A more complicated example is presented in the following code fragment. It demonstrates how to
+
+- change the default compiler to clang,
+- define a native static and dynamic library from a set of files selected by wildcards,
+- generate several executables accessing to the shared library and
+- generate a wrapper library to access the C++ library from python (if swig is available).
 
 .. code:: python
 

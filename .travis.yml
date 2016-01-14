@@ -14,6 +14,7 @@ script:
   - coverage run ./pyrate --output build1.ninja examples/example1.py
   - coverage run ./pyrate --output build2.ninja examples/example2.py
   - coverage run ./pyrate --output build3.ninja examples/example3.py
-  - cat examples/build1.ninja examples/build2.ninja examples/build3.ninja
+  - coverage run ./pyrate --output build3.ninja examples/example4.py
+  - cat examples/build1.ninja examples/build2.ninja examples/build3.ninja examples/build4.ninja
 after_success:
   - codecov
