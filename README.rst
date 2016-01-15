@@ -17,8 +17,8 @@ install **pyrate**, generate the ninja build file, build and execute a small exe
 .. code:: sh
 
     pip install pyrate-build
-    echo -e '#include <iostream>\nint main() { std::cout << "Ahoy World!" << std::endl; return 0; }' > test.cpp
-    echo -e "executable('test', ['test.cpp'])" > build.py
+    echo -e '#include <cstdio>\nint main() { printf("Ahoy World!"); return 0; }' > test.cpp
+    echo -e "executable('test', 'test.cpp')" > build.py
     pyrate build.py
     ninja
     ./test
@@ -59,62 +59,79 @@ invoke **pyrate** automatically by starting the build config script with:
 
     #!/usr/bin/env pyrate
 
-Syntax
-------
+Build File Configuration Syntax
+-------------------------------
 
-The build configuration script is written in python. Several functions and variables are
-available as global variables to ease the configuration of the build process.
+The build configuration for *pyrate* is written in python - so the full power
+of python can be used to construct and describe the build process.
+Several classes, functions and variables are available to ease and customize
+the configuration of the build process.
+
+Specifying build input
+~~~~~~~~~~~~~~~~~~~~~~
+
+The build input files that is given to one of the functions described further below
+can be specified either as a space separated string or as a list of strings / items:
+
+- ``"<file1> <file2> ..."``
+- ``["<file1>", "<file2>", ...]``
+
+Besides specifying these lists it by hand, there are many ways to construct such a list.
+Common methods include calling the python function ``os.listdir`` or using the helper
+function ``match``provided by **pyrate**:
 
 -  ``match(selector, dir_name = '.')``
 
-The function *match* allows to select files from a directory using a string consisting of
-black / white listing path name patterns.
+This functions allows to select files from a directory using a string consisting
+of black / white listing path name patterns.
 The selector ``'*.cpp -test*.cpp test3.cpp *.h'`` for example selects all files ending with
 ‘.h’ and ‘.cpp’, with the exception of those ‘.cpp’ files that start with ‘test’ and are not
 called ‘test3.cpp’.
 
-There are four global helper functions to define object files, executables and libraries based on
-a list of inputs (which can be files, other targets or externals)
+The list of build inputs can also contain external packages, build targets or
+any other kind of ``BuildSource`` (explained later).
 
--  ``executable(name, input_list, linker_opts = None, compiler_opts = None)``
--  ``shared_library(name, input_list, linker_opts = None, compiler_opts = None)``
--  ``static_library(name, input_list, linker_opts = None, compiler_opts = None)``
+Defining build targets
+~~~~~~~~~~~~~~~~~~~~~~
+
+There are four global helper functions to define object files, executables and libraries based
+on a list of build inputs (which can be files, other targets or externals)
+
+-  ``executable(name, input_list, compiler_opts = None, linker_opts = None)``
+-  ``shared_library(name, input_list, compiler_opts = None, linker_opts = None)``
+-  ``static_library(name, input_list, compiler_opts = None, linker_opts = None)``
 -  ``object_file(name, input_list, compiler_opts = None)``
 
+Each function returns a build target object, that can be used as input / dependency of another function.
 If multiple executables / libraries or object files with the same name but different inputs / options
-are defined, *pyrate* will ensure that the output will have a unique name (by appending a hash based suffix).
+are defined, **pyrate** will ensure that the output will have a unique name
+(by appending a hash based suffix as needed).
+
 The input list of these functions may contain:
 
 -  strings (file names that are processed according to the rules specified by the packages in the ``compiler`` dictionary),
 -  build targets (as returned by these functions themselves) or
 -  external dependencies (retrieved using ``find_external`` or explicitly defined).
 
-The above functions run as part of a so called build context, which allows for example
-to define implicit dependencies that are automatically included in all generated
-object files, executables or libraries. An instance of such a build context is created with:
+These functions exist as global functions and as member functions of a so-called build context,
+that describes how these functions are processed. The global functions are just executing
+within the default build context.
 
--  ``Context(...)`` - the most important parameters are:
-
-   * ``implicit_input``, ``implicit_object_input``, ``implicit_static_library_input``,
-     ``implicit_shared_library_input`` and ``implicit_executable_input``
-
-This context instance also provides member functions with the same syntax as the global functions
-described above. The default context used by these global function can be set using the variable:
-
--  ``default_context = Context(...)``
-
-By default, all targets that are defined by the above functions (or direct API calls) are built.
-In order to select these default targets, the global variable *default* can be set to a list
-of targets
+By default, all build targets that are defined by the above functions (or direct API calls) are built.
+In order to select these default targets, the global variable ``default`` can be set to a list
+of targets:
 
 -  ``default = [<target>,...]`` (``None`` == all targets are built)
 
-The build environment and dependencies on external packages can be expressed using the
+External dependencies
+~~~~~~~~~~~~~~~~~~~~~
+
+The build environment / dependencies of external packages can be expressed using the
 following functions / variables:
 
 -  ``find_external(name, ...)``
 
-The function *find\_external* searches for some external dependency (built-in or self-defined)
+The function ``find_external`` searches for some external dependency (built-in or self-defined)
 with the given name and returns either None or a representation of the dependency.
 The function takes additional positional and keyword arguments that depend on the external package.
 A common argument for this function is a version selector, that is supplied through a global variable:
@@ -126,6 +143,22 @@ that is used by the external package finder. This allows for example to write
 ``find_external('clang', version >= 3.5)`` to discover a clang installation with version 3.5 or later.
 Currently only a small number of built in external packages are available (listed under **Externals**),
 but it is easy to add new packages that are recognized.
+
+Configuration of the build environment
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+The build context allows for example to define implicit dependencies that are automatically
+included in all generated object files, executables or libraries.
+An instance of such a build context is created with:
+
+-  ``Context(...)`` - the most important parameters are:
+
+   * ``implicit_input``, ``implicit_object_input``, ``implicit_static_library_input``,
+     ``implicit_shared_library_input`` and ``implicit_executable_input``
+
+The default context used by these global function can be set using the variable:
+
+-  ``default_context = Context(...)``
 
 Finally, the used default compilers can be configured via the global variable
 
@@ -166,7 +199,6 @@ possible ``find_external`` arguments):
   * ``wrapper(target_language, library_name, interface_filename, libs = [<targets>...])``
 
 - pthread - posix thread library
-
 
 Example
 -------

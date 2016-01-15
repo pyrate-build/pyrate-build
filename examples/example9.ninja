@@ -1,0 +1,50 @@
+CXX = clang++
+CXX_FLAGS = -std=c++11 -Wall -pedantic
+rule compile_cpp
+  command = $CXX $CXX_FLAGS ${opts} -MMD -MT $out -MF $out.d -c $in -o $out
+  description = compile(cpp) $out
+  depfile = $out.d
+  deps = gcc
+
+LINKER_EXE = clang++
+LINKER_EXE_FLAGS = -g -Ofast
+rule link_exe_6dc1a356a32dc5c795e83452e621bb12
+  command = $LINKER_EXE $LINKER_EXE_FLAGS -L. -lFoo -o $out $in
+  description = link(exe) $out
+
+LINKER_SHARED = clang++
+LINKER_SHARED_FLAGS = -shared -g -Ofast
+rule link_shared
+  command = $LINKER_SHARED $LINKER_SHARED_FLAGS ${opts} -o $out $in
+  description = link(shared) $out
+
+LINKER_STATIC = llvm-ar
+LINKER_STATIC_FLAGS = rcs
+rule link_static
+  command = rm -f $out && $LINKER_STATIC $LINKER_STATIC_FLAGS ${opts} $out $in
+  description = link(static) $out
+
+rule swig_cpp_python
+  command = swig -c++ -python -I. ${opts} -module ${module_name} -o $out $in
+  description = swig(C++ -> python) $out
+
+build py_foo_1d82f3da7d0796d22a19a472acadb73b.o: compile_cpp py_foo.cpp
+  opts = -O3
+build foo_8d10fe610a29ee9064271a44377c3b5f.o: compile_cpp foo.cpp
+  opts = -O3
+build libFoo.a: link_static py_foo_1d82f3da7d0796d22a19a472acadb73b.o foo_8d10fe610a29ee9064271a44377c3b5f.o
+build py_foo_477ecfa48b4bb51fc2e93aebfb9bb3b3.o: compile_cpp py_foo.cpp
+  opts = -fPIC
+build foo_dadc29be0c8ba38ce9d1a8bf0bfca616.o: compile_cpp foo.cpp
+  opts = -fPIC
+build libFoo.so: link_shared py_foo_477ecfa48b4bb51fc2e93aebfb9bb3b3.o foo_dadc29be0c8ba38ce9d1a8bf0bfca616.o
+build mylib.cpp: swig_cpp_python mylib.i
+  module_name = mylib
+build mylib.o: compile_cpp mylib.cpp
+  opts = -I/usr/include/python2.7 -I/usr/include/python2.7 -fno-strict-aliasing -O2 -pipe -fomit-frame-pointer -march=core2 -fwrapv -DNDEBUG -fPIC
+build _mylib.so: link_shared mylib.o | libFoo.so
+  opts = -lpython2.7 -lpthread -ldl -lutil -lm -Xlinker -export-dynamic  -L. -lFoo
+build test.o: compile_cpp test.cpp
+build test.bin: link_exe_6dc1a356a32dc5c795e83452e621bb12 test.o | libFoo.so
+build test_cpp11.o: compile_cpp test_cpp11.cpp
+build test_cpp11.bin: link_exe_6dc1a356a32dc5c795e83452e621bb12 test_cpp11.o | libFoo.so
