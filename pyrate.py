@@ -13,15 +13,16 @@
 #-#  See the License for the specific language governing permissions and
 #-#  limitations under the License.
 
-pyrate_version = (0, 1, 5)
+pyrate_version = (0, 1, 6)
 
 import os, sys
 try:
 	import hashlib
-	md5 = hashlib.md5
+	def calc_hash(value):
+		return hashlib.md5(repr(value).encode('ascii')).hexdigest()
 except ImportError:
-	import md5
-	md5 = md5.md5
+	def calc_hash(value):
+		return __import__('md5').md5(repr(value)).hexdigest()
 
 class ProcessError(Exception):
 	pass
@@ -155,7 +156,10 @@ class SelfReference(object):
 class Rule(object):
 	def __init__(self, name, cmd, desc, defaults, **kwargs):
 		(self.name, self.cmd, self.desc, self.defaults) = (name, cmd, desc, defaults)
-		self.params = kwargs.items()
+		self.params = sorted(kwargs.items())
+
+	def get_hash(self):
+		return calc_hash([self.name, self.cmd, self.desc, sorted(self.defaults.items()), self.params])
 
 	def __repr__(self):
 		return nice_repr(self, 8)
@@ -175,6 +179,19 @@ class BuildSource(object):
 				result.setdefault(key, []).append(value)
 		return result
 
+	def get_hash(self, others = []):
+		def get_dict_keys(src):
+			result = []
+			for key, value_list in src.items():
+				for value in value_list:
+					if value == self:
+						result.append(calc_hash(0))
+					else:
+						result.append(value.get_hash())
+			return result
+		hash_tmp = get_dict_keys(self.on_use_inputs) + get_dict_keys(self.on_use_deps)
+		return calc_hash(others + hash_tmp + sorted(self.on_use_flags.items()))
+
 	def __repr__(self):
 		return nice_repr(self, 14)
 
@@ -185,27 +202,21 @@ class BuildTarget(BuildSource):
 		(self.name, self.build_rule, self.build_src) = (name, build_rule, build_src)
 		self._drop_opt = False
 
-	def get_key(self):
-		build_deps = tuple(map(lambda t: t.name, self.get_build_deps()))
-		build_flags = tuple(sorted(self.get_build_flags().items()))
-		return (self.build_rule.name, tuple(self.get_build_inputs()), build_deps, build_flags)
+	def get_hash(self, others = []):
+		build_src_hash_list = list(map(lambda obj: obj.get_hash(), self.build_src)) + others
+		return BuildSource.get_hash(self, [self.name, self.build_rule.get_hash(), build_src_hash_list])
 
-	def _get_build_x(self, src_getter, default, combine):
+	def _get_build(self, src_getter, default, combine):
 		result = default()
 		for entry in self.build_src:
 			combine(result, src_getter(entry).get(self.build_rule.name, src_getter(entry).get(None, default())))
 		return result
 
 	def get_build_inputs(self):
-		result = self._get_build_x(lambda e: e.on_use_inputs, list, list.extend)
-		def get_build_input_name(value):
-			if hasattr(value, 'name'):
-				return value.name
-			return value
-		return map(get_build_input_name, result)
+		return map(lambda obj: obj.name, self._get_build(lambda e: e.on_use_inputs, list, list.extend))
 
 	def get_build_deps(self):
-		return self._get_build_x(lambda e: e.on_use_deps, list, list.extend)
+		return self._get_build(lambda e: e.on_use_deps, list, list.extend)
 
 	def drop_build_opt(self):
 		self._drop_opt = True
@@ -215,7 +226,7 @@ class BuildTarget(BuildSource):
 			for key, value in flags.items():
 				if value:
 					result[key] = ('%s %s' % (result.get(key, ''), value)).strip()
-		result = self._get_build_x(lambda e: e.on_use_flags, dict, combine_flags)
+		result = self._get_build(lambda e: e.on_use_flags, dict, combine_flags)
 		if self._drop_opt:
 			result.pop('opts', None)
 		return result
@@ -223,26 +234,30 @@ class BuildTarget(BuildSource):
 
 class InputFile(BuildSource):
 	def __init__(self, name):
-		BuildSource.__init__(self, on_use_inputs = {None: [name]})
+		self.name = name
+		BuildSource.__init__(self, on_use_inputs = {None: [self]})
+
+	def __repr__(self):
+		return '%s(name = %s, on_use_inputs = {None: [self]})' % (self.__class__.__name__, self.name)
 
 
-class Environment(BuildSource):
+class RuleVariables(BuildSource):
 	def __init__(self, **kwargs):
 		BuildSource.__init__(self, on_use_flags = {None: kwargs})
 
 
-def add_env(**kwargs):
-	kwargs = filter(lambda key_value: key_value[1] != None, kwargs.items())
+def add_rule_vars(**kwargs):
+	kwargs = list(filter(lambda key_value: key_value[1] != None, kwargs.items()))
 	if kwargs:
-		return [Environment(**dict(kwargs))]
+		return [RuleVariables(**dict(kwargs))]
 	return []
 
 
 class External(BuildSource):
-	def __init__(self, ctx, on_use_flags = {}, rules = [], handlers = {}):
+	def __init__(self, ctx, on_use_flags = {}, rules = [], ext_handlers = {}):
 		BuildSource.__init__(self, on_use_flags = on_use_flags)
 		self.rules = rules
-		self.handlers = handlers
+		self.ext_handlers = ext_handlers
 
 	def _get_exec(self, template, version = None, fmt = '%s-%s'):
 		if isinstance(version, VersionComparison):
@@ -284,13 +299,13 @@ class External_CPP(External):
 				Rule('link_exe', '$LINKER_EXE $LINKER_EXE_FLAGS ${opts} -o $out $in', 'link(exe) $out',
 					{'LINKER_EXE': compiler, 'LINKER_EXE_FLAGS': exe_flags}),
 			],
-			handlers = {'cpp': 'compile_cpp', 'cxx': 'compile_cpp', 'cc': 'compile_cpp'}
+			ext_handlers = {'.cpp': 'compile_cpp', '.cxx': 'compile_cpp', '.cc': 'compile_cpp'}
 		)
 
 
 class External_GCC(External_CPP):
 	def __init__(self, ctx, version = None, std = None,
-			compiler_flags = '-fPIC -Wall -pedantic -pthread',
+			compiler_flags = '-Wall -pedantic',
 			static_flags = 'rcs',
 			shared_flags = '-shared -g -Ofast',
 			exe_flags = '-g -Ofast'):
@@ -304,7 +319,7 @@ External.available['gcc'] = External_GCC
 
 class External_Clang(External_CPP):
 	def __init__(self, ctx, version = None, std = None,
-			compiler_flags = '-fPIC -Wall -pedantic -pthread',
+			compiler_flags = '-Wall -pedantic',
 			static_flags = 'rcs',
 			shared_flags = '-shared -g -Ofast',
 			exe_flags = '-g -Ofast'):
@@ -340,20 +355,12 @@ class External_SWIG(External):
 
 	def wrapper(self, lang, name, ifile, libs = [], swig_opts = None, **kwargs):
 		wrapper_ext = self._ctx.find_external(lang)
-
-		swig_rule = Rule('swig_cpp_%s' % lang, 'swig -c++ -%s -I. ${opts} -o $out $in' % lang, 'swig(C++ -> %s) $out' % lang, {})
-		wrapper_create_target = BuildTarget(name + '.cpp', swig_rule,
-			[InputFile(ifile)] + add_env(opts = swig_opts),
-			on_use_inputs = {'compile_cpp': [name + '.cpp']})
-		self._ctx.registry.register_target(wrapper_create_target)
-
-		wrapper_compile_target = BuildTarget(name + '.o', self._ctx.get_rule('compile_cpp'),
-			[wrapper_create_target, wrapper_ext],
-			on_use_inputs = {'link_shared': [name + '.o']})
-		self._ctx.registry.register_target(wrapper_compile_target)
-
-		wrapper_lib_target = self._ctx.shared_library('_' + name, [wrapper_compile_target] + libs)
-		return wrapper_lib_target
+		swig_rule = Rule('swig_cpp_%s' % lang, 'swig -c++ -%s -I. ${opts} -module ${module_name} -o $out $in' % lang, 'swig(C++ -> %s) $out' % lang, {})
+		wrapper_src = BuildTarget(name + '.cpp', swig_rule,
+			[InputFile(ifile)] + add_rule_vars(opts = swig_opts, module_name = name),
+			on_use_inputs = {None: [SelfReference()]},
+			on_use_flags = wrapper_ext.on_use_flags)
+		return self._ctx.shared_library('_' + name, [wrapper_src, wrapper_ext] + libs)
 External.available['swig'] = External_SWIG
 
 
@@ -364,15 +371,15 @@ def get_normed_name(fn, forced_ext):
 
 class Registry(object):
 	def __init__(self):
-		self.target_key_dict = {}
+		self.target_hash_dict = {}
 		self.target_list = []
 
 	def register_target(self, target):
-		target_key = target.get_key()
-		stored_target = self.target_key_dict.get(target_key)
+		target_hash = target.get_hash()
+		stored_target = self.target_hash_dict.get(target_hash)
 		if not stored_target:
 			self.target_list.append(target)
-			stored_target = self.target_key_dict.setdefault(target_key, target)
+			stored_target = self.target_hash_dict.setdefault(target_hash, target)
 		return stored_target
 
 	def write(self):
@@ -383,12 +390,12 @@ class Registry(object):
 		for target in self.target_list:
 			target_opts = target.get_build_flags().get('opts', '')
 			rules_used.setdefault(target.build_rule.name, {}).setdefault(target_opts, []).append(target)
-			target_collisions.setdefault(target.name, []).append(target.get_key())
+			target_collisions.setdefault(target.name, []).append(target.get_hash())
 		# rename colliding targets
 		for target in self.target_list:
 			if len(set(target_collisions.get(target.name, []))) != 1:
 				(root, ext) = os.path.splitext(target.name)
-				target.name = root + '_' + md5(repr(target.get_key()).encode('ascii')).hexdigest() + ext
+				target.name = root + '_' + target.get_hash() + ext
 
 		rules_unique = {}
 		# identify rules with a fixed set of parameters to fold them into the rule definition
@@ -397,7 +404,7 @@ class Registry(object):
 				target_opts, targets = list(opts_of_targets.items())[0]
 				if target_opts and (len(targets) > 1): # ignore if the rule is only called once anyway
 					for target in targets:
-						target.build_rule.name += '_' + md5(target_opts).hexdigest()
+						target.build_rule.name += '_' + calc_hash(target_opts)
 						target.build_rule.cmd = target.build_rule.cmd.replace('${opts}', target_opts)
 						target.drop_build_opt()
 			for target_opts, targets in opts_of_targets.items():
@@ -420,63 +427,112 @@ class Context(object):
 		self._implicit_shared_library_input = implicit_shared_library_input + implicit_input
 		self._implicit_executable_input = implicit_executable_input + implicit_input
 
-	def process_inputs(self, input_list, compiler_opts):
-		if isinstance(input_list, str):
-			input_list = input_list.split()
-		result = []
-		for entry in input_list:
-			if isinstance(entry, str):
-				entry = self.object_file(entry, [InputFile(entry)], compiler_opts)
-			elif isinstance(entry, BuildTarget):
-				entry = self.registry.register_target(entry)
-			result.append(entry)
-		return result
-
-	def get_rule(self, name):
-		for pn, p in self.compiler.items():
-			for r in p.rules:
-				if r.name == name:
-					return Rule(r.name, r.cmd, r.desc, r.defaults, **dict(r.params))
-
 	def find_external(self, *args, **kwargs):
 		return construct_external(self, *args, **kwargs)
 
-	def create_target(self, target_name, rule_name, inputs, target_opts, process_input_opts, **kwargs):
-		target = BuildTarget(target_name, self.get_rule(rule_name),
-			self.process_inputs(inputs, process_input_opts) + add_env(opts = target_opts), **kwargs)
+	def find_rule(self, name): # return a new instance
+		for lang, compiler in self.compiler.items():
+			for r in compiler.rules:
+				if r.name == name:
+					return Rule(r.name, r.cmd, r.desc, r.defaults, **dict(r.params))
+
+	def find_handlers(self, obj):
+		def find_ext_handler(name):
+			result = set()
+			ext = os.path.splitext(name)[1]
+			for lang, compiler in self.compiler.items():
+				if ext in compiler.ext_handlers:
+					result.add(compiler.ext_handlers[ext])
+			return result
+		result = set()
+		if hasattr(obj, 'name'):
+			result.update(find_ext_handler(obj.name))
+		return result
+
+	def force_build_source(self, input_list):
+		if isinstance(input_list, str): # support accepting user supplied space separated string
+			input_list = input_list.split()
+		def translate_str(value):
+			if isinstance(value, str):
+				return InputFile(value)
+			elif isinstance(value, BuildTarget):
+				return self.registry.register_target(value)
+			return value
+		return list(map(translate_str, input_list))
+
+	def create_target(self, target_name, rule_name, input_list, add_self_to_on_use_inputs, **kwargs):
+		on_use_inputs = kwargs.pop('on_use_inputs', {})
+		if add_self_to_on_use_inputs:
+			on_use_inputs.setdefault(None, []).append(SelfReference())
+		target = BuildTarget(target_name, self.find_rule(rule_name), input_list,
+			on_use_inputs = on_use_inputs, **kwargs)
 		return self.registry.register_target(target)
 
-	def object_file(self, obj_name, inputs, compiler_opts = None, **kwargs):
-		(obj_name, ext) = get_normed_name(obj_name, self.platform.extensions['object'])
-		for pn, p in self.compiler.items():
-			if ext in p.handlers:
-				rule_name = p.handlers[ext]
-				target = self.create_target(obj_name, rule_name, self._implicit_object_input + inputs,
-					target_opts = compiler_opts, process_input_opts = None,
-					on_use_inputs = {None: [SelfReference()]}, **kwargs)
-				return self.registry.register_target(target)
-		raise Exception('Unable to create object file %s' % object_name)
+	def object_file(self, obj_name, input_list = [], compiler_opts = None, **kwargs):
+		input_list = self.force_build_source(input_list)
+		# collect rules from the input object extensions
+		input_rules = set()
+		for obj in input_list:
+			input_rules.update(self.find_handlers(obj))
+		if len(input_rules) != 1:
+			raise Exception('Unable to find unique rule (%s) to generate %s' % (repr(input_rules), obj_name))
+		(obj_name, obj_name_ext) = get_normed_name(obj_name, self.platform.extensions['object'])
+		return self.create_target(obj_name, rule_name = input_rules.pop(),
+			input_list = self._implicit_object_input + input_list + add_rule_vars(opts = compiler_opts),
+			add_self_to_on_use_inputs = True, **kwargs)
 
-	def static_library(self, lib_name, inputs, linker_opts = None, compiler_opts = None, **kwargs):
-		(lib_name, ext) = get_normed_name(lib_name, self.platform.extensions['static'])
-		return self.create_target(lib_name, 'link_static', self._implicit_static_library_input + inputs,
-			linker_opts, compiler_opts, on_use_inputs = {None: [lib_name]}, **kwargs)
+	def link(self, output_name, rule_name, input_list,
+			implicit_input_list, add_self_to_on_use_inputs, **kwargs):
+		input_list = self.force_build_source(input_list)
+		obj_sources = {}
+		env_list = []
+		for obj in input_list:
+			input_rules = self.find_handlers(obj)
+			if len(input_rules) == 1:
+				obj_sources.setdefault(input_rules.pop(), []).append(obj)
+			elif not input_rules:
+				env_list.append(obj)
+			else:
+				raise Exception('Found multiple rules (%s) to generate object from %s' % (repr(input_rules), repr(obj)))
+		result = []
+		compiler_opts = kwargs.pop('compiler_opts', None)
+		for compiler_rule_name, input_list in obj_sources.items():
+			for input_obj in input_list:
+				result.append(self.object_file(input_obj.name,
+					input_list = self._implicit_object_input + [input_obj], compiler_opts = compiler_opts))
+		input_list = result + env_list
+		input_list += implicit_input_list + add_rule_vars(opts = kwargs.pop('linker_opts', None))
+		return self.create_target(output_name, rule_name = rule_name, input_list = input_list,
+			add_self_to_on_use_inputs = add_self_to_on_use_inputs, **kwargs)
 
-	def shared_library(self, lib_name, inputs, linker_opts = None, compiler_opts = None, **kwargs):
+	def shared_library(self, lib_name, input_list, **kwargs):
 		(lib_name, ext) = get_normed_name(lib_name, self.platform.extensions['shared'])
 		link_name = lib_name.replace(self.platform.extensions['shared'], '')
 		if lib_name.startswith('lib'):
 			link_name = link_name[3:]
-		target = self.create_target(lib_name, 'link_shared', self._implicit_shared_library_input + inputs,
-			linker_opts, compiler_opts, on_use_deps = {None: [SelfReference()]},
-			on_use_flags = {None: {'opts': '-L. -l%s' % link_name}}, **kwargs)
-		return target
+		kwargs.setdefault('compiler_opts', '-fPIC')
+		on_use_flags = kwargs.pop('on_use_flags', {})
+		on_use_flags.setdefault(None, {}).setdefault('opts', '')
+		on_use_flags[None]['opts'] += ' -L. -l%s' % link_name
+		on_use_deps = kwargs.pop('on_use_deps', {})
+		on_use_deps.setdefault(None, []).append(SelfReference())
+		return self.link(lib_name, rule_name = 'link_shared',
+			input_list = input_list, add_self_to_on_use_inputs = False,
+			implicit_input_list = self._implicit_shared_library_input,
+			on_use_deps = on_use_deps, on_use_flags = on_use_flags, **kwargs)
 
-	def executable(self, exe_name, inputs, linker_opts = None, compiler_opts = None, **kwargs):
+	def static_library(self, lib_name, input_list, **kwargs):
+		(lib_name, ext) = get_normed_name(lib_name, self.platform.extensions['static'])
+		return self.link(lib_name, rule_name = 'link_static',
+			input_list = input_list, add_self_to_on_use_inputs = True,
+			implicit_input_list = self._implicit_static_library_input, **kwargs)
+
+	def executable(self, exe_name, input_list, **kwargs):
 		if not exe_name.endswith(self.platform.extensions['exe']):
 			exe_name += self.platform.extensions['exe']
-		return self.create_target(exe_name, 'link_exe', self._implicit_executable_input + inputs,
-			linker_opts, compiler_opts, **kwargs)
+		return self.link(exe_name, rule_name = 'link_exe',
+			input_list = input_list, add_self_to_on_use_inputs = False,
+			implicit_input_list = self._implicit_executable_input, **kwargs)
 
 
 def create_ctx(**kwargs):
@@ -509,7 +565,8 @@ def generate_build_file(bfn, ofn):
 		'match': match,
 		'version': VersionComparison(),
 		'find_external': default_ctx_call(exec_globals, Context.find_external),
-		'get_rule': default_ctx_call(exec_globals, Context.get_rule),
+		'find_rule': default_ctx_call(exec_globals, Context.find_rule),
+		'object_file': default_ctx_call(exec_globals, Context.object_file),
 		'executable': default_ctx_call(exec_globals, Context.executable),
 		'shared_library': default_ctx_call(exec_globals, Context.shared_library),
 		'static_library': default_ctx_call(exec_globals, Context.static_library),
@@ -541,7 +598,7 @@ def main():
 		import optparse
 		parser = optparse.OptionParser(usage = 'pyrate [options] build_file')
 		parser.add_option('', '--output', default = 'build.ninja',
-			help = 'name of output build file', dest="output")
+			help = 'name of output build file', dest='output')
 		(args, posargs) = parser.parse_args()
 		(bfn, ofn) = (posargs[0], args.output)
 

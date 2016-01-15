@@ -1,6 +1,4 @@
 #!/usr/bin/env pyrate
 
-static_library('libFoo_debug', ['foo.cpp'], compiler_opts = '-O0')
-static_library('libFoo_final', ['foo.cpp'], compiler_opts = '-O3')
-lib = static_library('libFoo_unchg', ['foo.cpp'])
-executable('bar.exe', ['test.cpp', lib])
+foo_lib = shared_library('libExample3', ['foo.cpp'], compiler_opts = '-fPIC -O3')
+executable('example3.bin', ['test.cpp', foo_lib])

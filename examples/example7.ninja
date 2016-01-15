@@ -1,0 +1,18 @@
+CXX = g++
+CXX_FLAGS = -Wall -pedantic
+rule compile_cpp
+  command = $CXX $CXX_FLAGS ${opts} -MMD -MT $out -MF $out.d -c $in -o $out
+  description = compile(cpp) $out
+  depfile = $out.d
+  deps = gcc
+
+LINKER_EXE = g++
+LINKER_EXE_FLAGS = -g -Ofast
+rule link_exe
+  command = $LINKER_EXE $LINKER_EXE_FLAGS ${opts} -o $out $in
+  description = link(exe) $out
+
+build foo_obj.o: compile_cpp foo.cpp
+  opts = -O3
+build test.o: compile_cpp test.cpp
+build example7.bin: link_exe test.o foo_obj.o

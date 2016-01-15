@@ -17,8 +17,8 @@ install **pyrate**, generate the ninja build file, build and execute a small exe
 .. code:: sh
 
     pip install pyrate-build
-    echo -e '#include <iostream>\nvoid main() { std::cout << "Ahoy World! << std::endl; }' > test.cpp
-    echo -e 'executable('test', ['test.cpp'])' > build.py
+    echo -e '#include <iostream>\nint main() { std::cout << "Ahoy World!" << std::endl; return 0; }' > test.cpp
+    echo -e "executable('test', ['test.cpp'])" > build.py
     pyrate build.py
     ninja
     ./test
@@ -51,9 +51,9 @@ and the optional parameter ‘–output’ to specify the name of the generated 
 When the script is started, it first changes the current directory to the directory
 containing the build configuration script, so all path names are relative to it.
 
-If **pyrate** is placed in a directory listed in the PATH environment variable, the
-build configure script can be made executable to invoke **pyrate** automatically by
-starting the build config script with:
+If **pyrate** is placed in a directory listed in the PATH environment variable (as automatically
+done by ``pip install pyrate-build``), the build configure script can be made executable to
+invoke **pyrate** automatically by starting the build config script with:
 
 .. code:: python
 
@@ -81,7 +81,9 @@ a list of inputs (which can be files, other targets or externals)
 -  ``static_library(name, input_list, linker_opts = None, compiler_opts = None)``
 -  ``object_file(name, input_list, compiler_opts = None)``
 
-The input list may contain:
+If multiple executables / libraries or object files with the same name but different inputs / options
+are defined, *pyrate* will ensure that the output will have a unique name (by appending a hash based suffix).
+The input list of these functions may contain:
 
 -  strings (file names that are processed according to the rules specified by the packages in the ``compiler`` dictionary),
 -  build targets (as returned by these functions themselves) or
@@ -201,8 +203,11 @@ A more complicated example is presented in the following code fragment. It demon
     for fn in match("test*.cpp"):
         executable(fn.replace('.cpp', '.exe'), [fn, lib_reference])
 
+Many more complicated examples are available at the `github`_ repository.
 
 .. _ninja(s): https://github.com/ninja-build/ninja
+
+.. _github: https://github.com/pyrate-build/pyrate-build/tree/master/examples
 
 .. |PyPI Version| image:: https://badge.fury.io/py/pyrate-build.svg
    :target: https://badge.fury.io/py/pyrate-build

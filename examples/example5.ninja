@@ -1,0 +1,22 @@
+CXX = g++
+CXX_FLAGS = -Wall -pedantic
+rule compile_cpp
+  command = $CXX $CXX_FLAGS ${opts} -MMD -MT $out -MF $out.d -c $in -o $out
+  description = compile(cpp) $out
+  depfile = $out.d
+  deps = gcc
+
+LINKER_EXE = g++
+LINKER_EXE_FLAGS = -g -Ofast
+rule link_exe
+  command = $LINKER_EXE $LINKER_EXE_FLAGS ${opts} -o $out $in
+  description = link(exe) $out
+
+build test_cccab165a36977f19a032b47563557e1.o: compile_cpp test.cpp
+build foo_e968d9a336f77d4113dadf94359cf395.o: compile_cpp foo.cpp
+build example5_3d693eca97d251c7494433e41c6e3a0e.bin: link_exe test_cccab165a36977f19a032b47563557e1.o foo_e968d9a336f77d4113dadf94359cf395.o
+build test_21405cd13661ce99b19dc1cf332cf4bc.o: compile_cpp test.cpp
+  opts = -O3
+build foo_8c2f3bc98274cc73acd2a7698b0593c9.o: compile_cpp foo.cpp
+  opts = -O3
+build example5_8f240ed9ebeee4c12a5ec62a79e84c58.bin: link_exe test_21405cd13661ce99b19dc1cf332cf4bc.o foo_8c2f3bc98274cc73acd2a7698b0593c9.o

@@ -2,9 +2,14 @@
 import os
 from setuptools import setup, find_packages
 
+version = None
 dn = os.path.dirname(__file__)
-version_expr = filter(lambda x: x.startswith('pyrate_version'), open(os.path.join(dn, 'pyrate.py')).readlines())
-version = str.join('.', map(str, eval(version_expr[0].split('=')[-1])))
+with open(os.path.join(dn, 'pyrate.py')) as fp:
+	for line in fp:
+		if line.startswith('pyrate_version'):
+			version_tuple = line.split('=')[-1].strip().replace(' ', '')
+			version = version_tuple.lstrip('(').rstrip(')').replace(',', '.')
+			break
 
 setup(
 	name='pyrate-build',
@@ -16,11 +21,13 @@ setup(
 	author='Fred Stober',
 	author_email='fred.stober@gmx.de',
 	license='License :: OSI Approved :: Apache Software License',
+	platforms=['Operating System :: OS Independent'],
 	classifiers=[
 		'Development Status :: 3 - Alpha',
 		'Intended Audience :: Developers',
 		'Topic :: Software Development :: Build Tools',
 		'License :: OSI Approved :: Apache Software License',
+		'Operating System :: OS Independent',
 		'Programming Language :: Python :: 2',
 		'Programming Language :: Python :: 2.6',
 		'Programming Language :: Python :: 2.7',

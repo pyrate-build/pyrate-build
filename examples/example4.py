@@ -1,3 +1,5 @@
 #!/usr/bin/env pyrate
 
-static_library('libFoo_debug', ['foo.cpp'], compiler_opts = '-O0')
+files = ['test.cpp', 'foo.cpp']
+executable('example4_debug.bin', files)
+executable('example4_release.bin', files, compiler_opts = '-O3')

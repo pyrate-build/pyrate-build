@@ -5,3 +5,6 @@ dist
 *.ninja
 *.o
 *.so
+*.bin
+py_*
+*.test
