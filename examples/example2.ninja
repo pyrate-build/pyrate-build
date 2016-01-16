@@ -7,7 +7,7 @@ rule compile_cpp
   deps = gcc
 
 LINKER_EXE = g++
-LINKER_EXE_FLAGS = -g -Ofast
+LINKER_EXE_FLAGS = -g
 rule link_exe
   command = $LINKER_EXE $LINKER_EXE_FLAGS ${opts} -o $out $in
   description = link(exe) $out

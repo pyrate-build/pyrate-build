@@ -78,7 +78,7 @@ can be specified either as a space separated string or as a list of strings / it
 
 Besides specifying these lists it by hand, there are many ways to construct such a list.
 Common methods include calling the python function ``os.listdir`` or using the helper
-function ``match``provided by **pyrate**:
+function ``match`` provided by **pyrate**:
 
 -  ``match(selector, dir_name = '.')``
 
@@ -118,10 +118,10 @@ that describes how these functions are processed. The global functions are just 
 within the default build context.
 
 By default, all build targets that are defined by the above functions (or direct API calls) are built.
-In order to select these default targets, the global variable ``default`` can be set to a list
+In order to select these default targets, the global variable ``default_targets`` can be set to a list
 of targets:
 
--  ``default = [<target>,...]`` (``None`` == all targets are built)
+-  ``default_targets = [<target>,...]`` (``None`` == all targets are built)
 
 External dependencies
 ~~~~~~~~~~~~~~~~~~~~~
@@ -165,7 +165,8 @@ Finally, the used default compilers can be configured via the global variable
 -  ``compiler``
 
 This is a dictionary that contains links to external packages that provide the basic rules
-and parameters that are used to build the source.
+and parameters that are used to build the source. This dictionary can be modified, but should
+not be overwritten.
 
 Externals
 ---------
@@ -235,7 +236,7 @@ A more complicated example is presented in the following code fragment. It demon
     for fn in match("test*.cpp"):
         executable(fn.replace('.cpp', '.exe'), [fn, lib_reference])
 
-Many more complicated examples are available at the `github`_ repository.
+Many more examples with an increasing level of complexity are available in the `github`_ repository.
 
 .. _ninja(s): https://github.com/ninja-build/ninja
 

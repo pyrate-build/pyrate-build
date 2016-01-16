@@ -7,20 +7,28 @@ rule compile_cpp
   deps = gcc
 
 LINKER_EXE = g++
-LINKER_EXE_FLAGS = -g -Ofast
+LINKER_EXE_FLAGS = -g
 rule link_exe
   command = $LINKER_EXE $LINKER_EXE_FLAGS ${opts} -o $out $in
   description = link(exe) $out
 
 LINKER_SHARED = g++
-LINKER_SHARED_FLAGS = -shared -g -Ofast
+LINKER_SHARED_FLAGS = -shared -g -fPIC
 rule link_shared
   command = $LINKER_SHARED $LINKER_SHARED_FLAGS ${opts} -o $out $in
   description = link(shared) $out
 
 build foo.o: compile_cpp foo.cpp
-  opts = -fPIC -O3
-build libExample3.so: link_shared foo.o
-build test.o: compile_cpp test.cpp
-build example3.bin: link_exe test.o | libExample3.so
-  opts = -L. -lExample3
+  opts = -O3 -fPIC
+build libExample3a.so: link_shared foo.o
+build test_1cfedb0e86f69ad43c2ba451c73bb586.o: compile_cpp test.cpp
+build example3a.bin: link_exe test_1cfedb0e86f69ad43c2ba451c73bb586.o | libExample3a.so
+  opts = -L. -lExample3a
+build libExample3b.so: link_shared foo.o
+build example3b.bin: link_exe test_1cfedb0e86f69ad43c2ba451c73bb586.o | libExample3b.so
+  opts = -L. -lExample3b
+build test_ddc519d468dd216db1ca93f9f80094a0.o: compile_cpp test.cpp
+  opts = -O0
+build example3c.bin: link_exe test_ddc519d468dd216db1ca93f9f80094a0.o | libExample3b.so
+  opts = -L. -lExample3b
+default example3c.bin

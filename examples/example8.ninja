@@ -7,7 +7,7 @@ rule compile_cpp
   deps = gcc
 
 LINKER_SHARED = g++
-LINKER_SHARED_FLAGS = -shared -g -Ofast
+LINKER_SHARED_FLAGS = -shared -g -fPIC
 rule link_shared
   command = $LINKER_SHARED $LINKER_SHARED_FLAGS ${opts} -o $out $in
   description = link(shared) $out

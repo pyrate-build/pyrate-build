@@ -1,10 +1,11 @@
 *.a
+*.bin
+build
 dist
 *.egg-info
 .ninja_*
 *.ninja
 *.o
-*.so
-*.bin
 py_*
+*.so
 *.test

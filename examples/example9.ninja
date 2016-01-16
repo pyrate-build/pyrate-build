@@ -1,5 +1,5 @@
 CXX = clang++
-CXX_FLAGS = -std=c++11 -Wall -pedantic
+CXX_FLAGS = -std=c++11 -Weverything
 rule compile_cpp
   command = $CXX $CXX_FLAGS ${opts} -MMD -MT $out -MF $out.d -c $in -o $out
   description = compile(cpp) $out
@@ -7,13 +7,13 @@ rule compile_cpp
   deps = gcc
 
 LINKER_EXE = clang++
-LINKER_EXE_FLAGS = -g -Ofast
+LINKER_EXE_FLAGS = -g
 rule link_exe_6dc1a356a32dc5c795e83452e621bb12
   command = $LINKER_EXE $LINKER_EXE_FLAGS -L. -lFoo -o $out $in
   description = link(exe) $out
 
 LINKER_SHARED = clang++
-LINKER_SHARED_FLAGS = -shared -g -Ofast
+LINKER_SHARED_FLAGS = -shared -g -fPIC
 rule link_shared
   command = $LINKER_SHARED $LINKER_SHARED_FLAGS ${opts} -o $out $in
   description = link(shared) $out
@@ -28,16 +28,16 @@ rule swig_cpp_python
   command = swig -c++ -python -I. ${opts} -module ${module_name} -o $out $in
   description = swig(C++ -> python) $out
 
-build py_foo_1d82f3da7d0796d22a19a472acadb73b.o: compile_cpp py_foo.cpp
+build py_foo_f075f85823ee689bd3034bb7a1d086a9.o: compile_cpp py_foo.cpp
   opts = -O3
-build foo_8d10fe610a29ee9064271a44377c3b5f.o: compile_cpp foo.cpp
+build foo_a00794ba68f424547f768bebc6282496.o: compile_cpp foo.cpp
   opts = -O3
-build libFoo.a: link_static py_foo_1d82f3da7d0796d22a19a472acadb73b.o foo_8d10fe610a29ee9064271a44377c3b5f.o
-build py_foo_477ecfa48b4bb51fc2e93aebfb9bb3b3.o: compile_cpp py_foo.cpp
+build libFoo.a: link_static py_foo_f075f85823ee689bd3034bb7a1d086a9.o foo_a00794ba68f424547f768bebc6282496.o
+build py_foo_e9a5dd8550e7204d577f04ffc9d84264.o: compile_cpp py_foo.cpp
   opts = -fPIC
-build foo_dadc29be0c8ba38ce9d1a8bf0bfca616.o: compile_cpp foo.cpp
+build foo_e63d2608d620b1e1f96f610d320a7dbf.o: compile_cpp foo.cpp
   opts = -fPIC
-build libFoo.so: link_shared py_foo_477ecfa48b4bb51fc2e93aebfb9bb3b3.o foo_dadc29be0c8ba38ce9d1a8bf0bfca616.o
+build libFoo.so: link_shared py_foo_e9a5dd8550e7204d577f04ffc9d84264.o foo_e63d2608d620b1e1f96f610d320a7dbf.o
 build mylib.cpp: swig_cpp_python mylib.i
   module_name = mylib
 build mylib.o: compile_cpp mylib.cpp

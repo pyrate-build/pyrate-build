@@ -3,7 +3,7 @@
 set -e
 cd $(dirname $0)
 if [ -n "$(which coverage 2> /dev/null)" ]; then
-	EXEC="coverage run ../pyrate"
+	EXEC="coverage run -a ../pyrate"
 else
 	EXEC="../pyrate"
 fi
@@ -21,3 +21,7 @@ for EXAMPLE in $TESTS; do
 	diff -u $EXAMPLE_NINJA $EXAMPLE_NINJA.test
 	echo "TEST OK"
 done
+
+if [ -n "$(which coverage 2> /dev/null)" ]; then
+	mv .coverage ..
+fi
