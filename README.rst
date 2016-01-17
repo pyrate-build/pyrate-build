@@ -19,7 +19,7 @@ install **pyrate**, generate the ninja build file, build and execute a small exe
     pip install pyrate-build
     echo -e '#include <cstdio>\nint main() { printf("Ahoy World!"); return 0; }' > test.cpp
     echo -e "executable('test', 'test.cpp')" > build.py
-    pyrate build.py
+    pyrate
     ninja
     ./test
 
@@ -111,15 +111,15 @@ The input list of these functions may contain:
 
 -  strings (file names that are processed according to the rules specified by the packages in the ``compiler`` dictionary),
 -  build targets (as returned by these functions themselves) or
--  external dependencies (retrieved using ``find_external`` or explicitly defined).
+-  external dependencies (retrieved using ``find_external``, ``create_external`` or explicitly defined).
 
 These functions exist as global functions and as member functions of a so-called build context,
 that describes how these functions are processed. The global functions are just executing
 within the default build context.
 
 By default, all build targets that are defined by the above functions (or direct API calls) are built.
-In order to select these default targets, the global variable ``default_targets`` can be set to a list
-of targets:
+In order to select only certain default targets, the global variable ``default_targets`` can be set
+to a list of targets:
 
 -  ``default_targets = [<target>,...]`` (``None`` == all targets are built)
 
@@ -138,18 +138,20 @@ A common argument for this function is a version selector, that is supplied thro
 
 -  ``version``
 
-The comparisons with this variable (eg. ``version >= 4.1``) will create new version instance
+The comparisons with this variable (eg. ``version >= 4.1``) will create a version comparison instance
 that is used by the external package finder. This allows for example to write
 ``find_external('clang', version >= 3.5)`` to discover a clang installation with version 3.5 or later.
-Currently only a small number of built in external packages are available (listed under **Externals**),
-but it is easy to add new packages that are recognized.
+Since this facility is integrated with ``pkg-config``, a large number of external packages is
+available - in addition to a handful of builtin external packages with special implementation features.
+It is also possible to add new packages that are recognized.
+A list of the builtin packages is presented in the **Externals** section.
 
 In order to simplify the creation of external packages that already provide a build configuration tool
 to query version, linker or compiler options, **pyrate** provides the function:
 
 -  ``create_external(name, build_helper, ...)``
 
-It requires to define a name for the external package and supplying the build configuration tool.
+It requires the user to define a name for the external package and to supply the build configuration tool.
 The values of additional parameters are interpreted as command line options for the build configuration tool.
 The name of these additional parameters specify the name of the
 rule that gets supplied with the flags given by the output of the build configuration tool.
@@ -169,7 +171,7 @@ The following example recreates the builtin external package wxWidgets:
 
 .. code:: python
 
-    my_wxwidgets = create_external('wxwidgets5', build_helper = 'wx-config',
+    my_wxwidgets = create_external('wxwidgets', build_helper = 'wx-config',
         version_query = '--version', link = '--libs', compile_cpp = '--cxxflags')
 
 
@@ -213,7 +215,7 @@ Currently the following builtin externals are supported (listed with all possibl
 - ``clang``
 
   * ``version`` - specifies required version (eg. ``version > 3.5``)
-  * ``std`` - C/C++ language standard version (eg. ``'gnu++14'`` or ``'latest'``).
+  * ``std`` - C/C++ language standard version (eg. ``'c++1y'`` or ``'latest'``).
     A property with the same name allows to also set this value on an existing external (eg. ``compiler['C++'].std = 'latest'``).
   * ``compiler_flags`` - flags that are used during the compilation stage
   * ``static_flags``, ``shared_flags``, ``exe_flags`` - flags that are used during the linking stage
