@@ -209,18 +209,18 @@ Currently the following builtin externals are supported (listed with all possibl
   * ``version`` - specifies required version (eg. ``version >= 5.2``)
   * ``std`` - C/C++ language standard version (eg. ``'gnu++14'`` or ``'latest'``).
     A property with the same name allows to also set this value on an existing external (eg. ``compiler['C++'].std = 'latest'``).
-  * ``compiler_cpp`` - name of the executable
-  * ``compile_cpp_opts`` - flags that are used during the compilation stage
-  * ``link_static_flags``, ``link_shared_flags``, ``link_exe_flags`` - flags that are used during the linking stage
+  * ``compile_cpp`` - name of the executable
+  * ``compile_cpp_opts`` - options that are used during the compilation stage
+  * ``link_static_opts``, ``link_shared_opts``, ``link_exe_opts`` - options that are used during the linking stage
 
 - ``clang``
 
   * ``version`` - specifies required version (eg. ``version > 3.5``)
   * ``std`` - C/C++ language standard version (eg. ``'c++1y'`` or ``'latest'``).
     A property with the same name allows to also set this value on an existing external (eg. ``compiler['C++'].std = 'latest'``).
-  * ``compiler_cpp`` - name of the executable
-  * ``compile_cpp_opts`` - flags that are used during the compilation stage
-  * ``link_static_flags``, ``link_shared_flags``, ``link_exe_flags`` - flags that are used during the linking stage
+  * ``compile_cpp`` - name of the executable
+  * ``compile_cpp_opts`` - options that are used during the compilation stage
+  * ``link_static_opts``, ``link_shared_opts``, ``link_exe_opts`` - options that are used during the linking stage
 
 - ``swig`` - The swig package also provides the member function ``wrapper`` to describe the generation of automated interface code
 

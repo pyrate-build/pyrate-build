@@ -13,7 +13,7 @@
 #-#  See the License for the specific language governing permissions and
 #-#  limitations under the License.
 
-__version__ = '0.1.9'
+__version__ = '0.1.10'
 pyrate_version = tuple(__version__.split('.'))
 
 import os, sys
@@ -324,7 +324,7 @@ class External_CPP(External):
 	std = property(lambda self: self._std, lambda self, value: self._set_std(value))
 
 	def __init__(self, ctx, compiler, linker, compile_cpp_opts,
-			link_static_flags, link_shared_flags, link_exe_flags):
+			link_static_opts, link_shared_opts, link_exe_opts):
 		self._std = None
 		self._compiler = compiler
 		self._compile_cpp_opts = compile_cpp_opts
@@ -335,11 +335,11 @@ class External_CPP(External):
 		External.__init__(self, ctx,
 			rules = [self._compile_cpp_rule,
 				Rule('link_static', 'rm -f $out && $LINKER_STATIC $LINKER_STATIC_FLAGS ${opts} $out $in', 'link(static) $out',
-					{'LINKER_STATIC': linker, 'LINKER_STATIC_FLAGS': link_static_flags}),
+					{'LINKER_STATIC': linker, 'LINKER_STATIC_FLAGS': link_static_opts}),
 				Rule('link_shared', '$LINKER_SHARED $LINKER_SHARED_FLAGS ${opts} -o $out $in', 'link(shared) $out',
-					{'LINKER_SHARED': compiler, 'LINKER_SHARED_FLAGS': link_shared_flags}),
+					{'LINKER_SHARED': compiler, 'LINKER_SHARED_FLAGS': link_shared_opts}),
 				Rule('link_exe', '$LINKER_EXE $LINKER_EXE_FLAGS ${opts} -o $out $in', 'link(exe) $out',
-					{'LINKER_EXE': compiler, 'LINKER_EXE_FLAGS': link_exe_flags}),
+					{'LINKER_EXE': compiler, 'LINKER_EXE_FLAGS': link_exe_opts}),
 			],
 			ext_handlers = {'.cpp': 'compile_cpp', '.cxx': 'compile_cpp', '.cc': 'compile_cpp'},
 			enforced_flags_by_target_type = {'shared': {'compile_cpp': {'opts': ['-fPIC']}}})
@@ -353,17 +353,17 @@ class External_CPP(External):
 
 
 class External_GCC(External_CPP):
-	def __init__(self, ctx, version = None, std = None, compiler_cpp = 'g++',
+	def __init__(self, ctx, version = None, std = None, compile_cpp = 'g++',
 			compile_cpp_opts = '-Wall -pedantic',
-			link_static_flags = 'rcs',
-			link_shared_flags = '-shared -g -fPIC',
-			link_exe_flags = '-g'):
+			link_static_opts = 'rcs',
+			link_shared_opts = '-shared -g -fPIC',
+			link_exe_opts = '-g'):
 
-		self.version = Version(run_process([compiler_cpp, '--version'])[0].splitlines()[0].split()[-1])
+		self.version = Version(run_process([compile_cpp, '--version'])[0].splitlines()[0].split()[-1])
 		if version and not version(self.version):
 			raise VersionError
-		External_CPP.__init__(self, ctx, compiler_cpp, 'gcc-ar',
-			compile_cpp_opts, link_static_flags, link_shared_flags, link_exe_flags)
+		External_CPP.__init__(self, ctx, compile_cpp, 'gcc-ar',
+			compile_cpp_opts, link_static_opts, link_shared_opts, link_exe_opts)
 		self._set_std(std)
 
 	def _set_std(self, value):
@@ -383,17 +383,17 @@ External.available['gcc'] = External_GCC
 
 
 class External_Clang(External_CPP):
-	def __init__(self, ctx, version = None, std = None, compiler_cpp = 'clang++',
+	def __init__(self, ctx, version = None, std = None, compile_cpp = 'clang++',
 			compile_cpp_opts = '-Weverything',
-			link_static_flags = 'rcs',
-			link_shared_flags = '-shared -g -fPIC',
-			link_exe_flags = '-g'):
+			link_static_opts = 'rcs',
+			link_shared_opts = '-shared -g -fPIC',
+			link_exe_opts = '-g'):
 
-		self.version = Version(run_process([compiler_cpp, '-v'])[1].splitlines()[0].split()[2])
+		self.version = Version(run_process([compile_cpp, '-v'])[1].splitlines()[0].split()[2])
 		if version and not version(self.version):
 			raise VersionError
-		External_CPP.__init__(self, ctx, compiler_cpp, 'llvm-ar',
-			compile_cpp_opts, link_static_flags, link_shared_flags, link_exe_flags)
+		External_CPP.__init__(self, ctx, compile_cpp, 'llvm-ar',
+			compile_cpp_opts, link_static_opts, link_shared_opts, link_exe_opts)
 		self._set_std(std)
 
 	def _set_std(self, value):
