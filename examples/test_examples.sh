@@ -2,10 +2,14 @@
 
 set -e
 cd $(dirname $0)
-if [ -n "$(which coverage 2> /dev/null)" ]; then
-	EXEC="coverage run -a ../pyrate"
+
+if [ -n "$1" ]; then
+	EXEC="$1 ../pyrate"
 else
 	EXEC="../pyrate"
+fi
+if [ -n "$(which coverage 2> /dev/null)" ]; then
+	EXEC="coverage run -a $EXEC"
 fi
 echo "Running $EXEC"
 

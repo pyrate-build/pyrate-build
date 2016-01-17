@@ -13,7 +13,8 @@
 #-#  See the License for the specific language governing permissions and
 #-#  limitations under the License.
 
-pyrate_version = (0, 1, 7)
+__version__ = '0.1.8'
+pyrate_version = tuple(__version__.split('.'))
 
 import os, sys
 try:
@@ -42,7 +43,7 @@ def run_process(args):
 	if ret != 0:
 		raise ProcessError('Process %r exit code %d' % (args, ret))
 	(stdout, stderr) = p.communicate()
-	return (stdout.decode('utf-8'), stderr.decode('utf-8'))
+	return (stdout.decode('utf-8').strip(), stderr.decode('utf-8').strip())
 
 
 def nice_repr(ref, keylen, delim = '   '):
@@ -62,35 +63,48 @@ class VersionError(Exception):
 	pass
 
 
-class VersionComparison(object):
-	def __init__(self, value = None, op = None, cmpfun = None):
-		if value:
-			value = tuple(str(value).split('.'))
-		(self.value, self.op, self.cmpfun) = (value, op, cmpfun)
-	def __str__(self):
-		return repr(self.__dict__)
-	def check(self, other):
-		other = tuple(map(int, str(other).split('.')))
-		if not other:
-			return False
-		value = tuple(map(int, self.value))
-		if len(other) > len(value):
-			value = tuple(list(value) + [0]*(len(other) - len(value)))
-		elif len(other) < len(value):
-			other = tuple(list(other) + [0]*(len(value) - len(other)))
-		return self.cmpfun(other, value)
+class Version(object):
+	def __init__(self, value):
+		if isinstance(value, Version):
+			value = value.value
+		if isinstance(value, tuple): # (1,32,5)
+			value = list(value)
+		elif isinstance(value, str): # '1.32.5'
+			value = list(map(int, value.split('.')))
+		else:
+			value = list(map(int, str(value).split('.'))) # 1.32
+		self.value = tuple(value + [0] * (4 - len(value)))
+	def __repr__(self):
+		return 'Version(%s)' % str.join('.', map(repr, self.value))
 	def __lt__(self, other):
-		return VersionComparison(other, '<', tuple.__lt__)
+		return self.value < Version(other).value
 	def __le__(self, other):
-		return VersionComparison(other, '<=', tuple.__le__)
+		return self.value <= Version(other).value
 	def __eq__(self, other):
-		return VersionComparison(other, '==', tuple.__eq__)
+		return self.value == Version(other).value
 	def __ne__(self, other):
-		return VersionComparison(other, '!=', tuple.__ne__)
+		return self.value != Version(other).value
 	def __gt__(self, other):
-		return VersionComparison(other, '>', tuple.__gt__)
+		return self.value > Version(other).value
 	def __ge__(self, other):
-		return VersionComparison(other, '>=', tuple.__ge__)
+		return self.value >= Version(other).value
+
+
+class VersionComparison(object):
+	def __init__(self):
+		pass
+	def __lt__(self, other):
+		return Version(other).__gt__
+	def __le__(self, other):
+		return Version(other).__ge__
+	def __eq__(self, other):
+		return Version(other).__eq__
+	def __ne__(self, other):
+		return Version(other).__ne__
+	def __gt__(self, other):
+		return Version(other).__lt__
+	def __ge__(self, other):
+		return Version(other).__le__
 
 
 def match(value, dn = '.'):
@@ -107,6 +121,7 @@ def match(value, dn = '.'):
 			accept = not negate
 		if accept:
 			result.append(fn)
+	result.sort()
 	return result
 
 
@@ -114,12 +129,23 @@ class Delayed(object):
 	def __init__(self, cls, *args, **kwargs):
 		(self._cls, self._args, self._kwargs) = (cls, args, kwargs)
 		self._delayed_instance = None
-	def __getattribute__(self, name):
-		if name in ['_delayed_instance', '_cls', '_args', '_kwargs']:
-			return object.__getattribute__(self, name)
+	def _get_instance(self):
 		if not self._delayed_instance:
 			self._delayed_instance = self._cls(*self._args, **self._kwargs)
-		return self._delayed_instance.__getattribute__(name)
+		return self._delayed_instance
+	def __setattr__(self, name, value):
+		if name in ['_get_instance', '_delayed_instance', '_cls', '_args', '_kwargs']:
+			return object.__setattr__(self, name, value)
+		return self._get_instance().__setattr__(name, value)
+	def __getattribute__(self, name):
+		if name in ['_get_instance', '_delayed_instance', '_cls', '_args', '_kwargs']:
+			return object.__getattribute__(self, name)
+		return self._get_instance().__getattribute__(name)
+	def __repr__(self):
+		if self._delayed_instance:
+			return 'Delayed(%s)' % repr(self._delayed_instance)
+		else:
+			return 'Delayed(%s(*%s, **%s))' % (self._cls, self._args, self._kwargs)
 
 
 class NinjaBuildFileWriter(object):
@@ -144,7 +170,7 @@ class NinjaBuildFileWriter(object):
 		if target.get_build_deps():
 			self._fp.write(' | %s' % str.join(' ', map(lambda t: t.name, target.get_build_deps())))
 		self._fp.write('\n')
-		for key_value in target.get_build_flags().items():
+		for key_value in sorted(target.get_build_flags().items()):
 			self._fp.write('  %s = %s\n' % key_value)
 
 
@@ -192,7 +218,7 @@ class BuildSource(object):
 	def get_hash(self, others = None):
 		def get_dict_keys(src):
 			result = []
-			for key, value_list in src.items():
+			for key, value_list in sorted(src.items()):
 				result.append(calc_hash(key))
 				for value in value_list:
 					if value == self:
@@ -216,9 +242,9 @@ class BuildTarget(BuildSource):
 
 	def get_hash(self):
 		return calc_hash([self.name, self.build_rule.get_hash(),
-			list(sorted(map(lambda t: t.get_hash(), self.get_build_inputs()))),
-			list(sorted(map(lambda t: t.get_hash(), self.get_build_deps()))),
-			list(sorted(self.get_build_flags().items()))])
+			sorted(map(lambda t: t.get_hash(), self.get_build_inputs())),
+			sorted(map(lambda t: t.get_hash(), self.get_build_deps())),
+			sorted(self.get_build_flags().items())])
 
 	def _get_build(self, src_getter, default, combine):
 		result = default()
@@ -275,20 +301,14 @@ class External(BuildSource):
 		self.rules = none_to_obj(rules, [])
 		self.ext_handlers = none_to_obj(ext_handlers, {})
 		self.enforced_flags_by_target_type = none_to_obj(enforced_flags_by_target_type, {})
-
-	def _get_exec(self, template, version = None, fmt = '%s-%s'):
-		if isinstance(version, VersionComparison):
-			return template # TODO
-		if not version:
-			return template
-		return fmt % (template, version)
 External.available = {}
 
 
 def construct_external(ctx, value, *args, **kwargs):
 	value == value.lower()
 	if value not in External.available:
-		raise Exception('Unknown external %r' % value)
+		if not define_pkg_config_external(value):
+			raise Exception('Unknown external %r' % value)
 	try:
 		return External.available[value](ctx, *args, **kwargs)
 	except ProcessError:
@@ -297,24 +317,20 @@ def construct_external(ctx, value, *args, **kwargs):
 		sys.stderr.write('Unable to find correct version of %s\n' % value)
 
 
-class External_pthread(External):
-	def __init__(self, ctx):
-		External.__init__(self, ctx, on_use_flags = {
-			'compile_cpp': {'opts': '-pthread'},
-			'link_static': {'opts': '-pthread'},
-			'link_shared': {'opts': '-pthread'},
-			'link_exe': {'opts': '-pthread'},
-		})
-External.available['pthread'] = External_pthread
-
-
 class External_CPP(External):
-	def __init__(self, ctx, compiler, linker, compile_cpp_flags,
+	std = property(lambda self: self._std, lambda self, value: self._set_std(value))
+
+	def __init__(self, ctx, compiler, linker, compile_cpp_opts,
 			link_static_flags, link_shared_flags, link_exe_flags):
+		self._std = None
+		self._compiler = compiler
+		self._compile_cpp_opts = compile_cpp_opts
+		self._compile_cpp_rule = Rule('compile_cpp',
+			'$CXX $CXX_FLAGS ${opts} -MMD -MT $out -MF $out.d -c $in -o $out', 'compile(cpp) $out',
+			{'CXX': self._compiler, 'CXX_FLAGS': self._compile_cpp_opts},
+			depfile = '$out.d', deps = 'gcc')
 		External.__init__(self, ctx,
-			rules = [
-				Rule('compile_cpp', '$CXX $CXX_FLAGS ${opts} -MMD -MT $out -MF $out.d -c $in -o $out', 'compile(cpp) $out',
-					{'CXX': compiler, 'CXX_FLAGS': compile_cpp_flags}, depfile = '$out.d', deps = 'gcc'),
+			rules = [self._compile_cpp_rule,
 				Rule('link_static', 'rm -f $out && $LINKER_STATIC $LINKER_STATIC_FLAGS ${opts} $out $in', 'link(static) $out',
 					{'LINKER_STATIC': linker, 'LINKER_STATIC_FLAGS': link_static_flags}),
 				Rule('link_shared', '$LINKER_SHARED $LINKER_SHARED_FLAGS ${opts} -o $out $in', 'link(shared) $out',
@@ -325,61 +341,157 @@ class External_CPP(External):
 			ext_handlers = {'.cpp': 'compile_cpp', '.cxx': 'compile_cpp', '.cc': 'compile_cpp'},
 			enforced_flags_by_target_type = {'shared': {'compile_cpp': {'opts': ['-fPIC']}}})
 
+	def _set_std(self, value):
+		self._std = value
+		if not value:
+			self._compile_cpp_rule.defaults['CXX_FLAGS'] = self._compile_cpp_opts
+		else:
+			self._compile_cpp_rule.defaults['CXX_FLAGS'] = ('-std=%s ' % value) + self._compile_cpp_opts
+
 
 class External_GCC(External_CPP):
-	def __init__(self, ctx, version = None, std = None,
-			compile_cpp_flags = '-Wall -pedantic',
+	def __init__(self, ctx, version = None, std = None, compiler_cpp = 'g++',
+			compile_cpp_opts = '-Wall -pedantic',
 			link_static_flags = 'rcs',
 			link_shared_flags = '-shared -g -fPIC',
 			link_exe_flags = '-g'):
-		compiler = self._get_exec('g++', version)
-		run_process([compiler, '-v'])
-		if std:
-			compile_cpp_flags = '-std=%s %s' % (std, compile_cpp_flags)
-		External_CPP.__init__(self, ctx, compiler, 'gcc-ar',
-			compile_cpp_flags, link_static_flags, link_shared_flags, link_exe_flags)
+
+		self.version = Version(run_process([compiler_cpp, '--version'])[0].splitlines()[0].split()[-1])
+		if version and not version(self.version):
+			raise VersionError
+		External_CPP.__init__(self, ctx, compiler_cpp, 'gcc-ar',
+			compile_cpp_opts, link_static_flags, link_shared_flags, link_exe_flags)
+		self._set_std(std)
+
+	def _set_std(self, value):
+		if value == 'latest':
+			if self.version < 4.3:
+				value = 'c++03'
+			elif self.version < 4.7:
+				value = 'c++0x'
+			elif self.version < 4.8:
+				value = 'c++11'
+			elif self.version < 5.0:
+				value = 'c++14'
+			else:
+				value = 'c++1z'
+		External_CPP._set_std(self, value)
 External.available['gcc'] = External_GCC
 
 
 class External_Clang(External_CPP):
-	def __init__(self, ctx, version = None, std = None,
-			compile_cpp_flags = '-Weverything',
+	def __init__(self, ctx, version = None, std = None, compiler_cpp = 'clang++',
+			compile_cpp_opts = '-Weverything',
 			link_static_flags = 'rcs',
 			link_shared_flags = '-shared -g -fPIC',
 			link_exe_flags = '-g'):
-		compiler = 'clang++'
-		installed_version = run_process([compiler, '-v'])[1].splitlines()[0].split()[2]
-		if version and not version.check(installed_version):
+
+		self.version = Version(run_process([compiler_cpp, '-v'])[1].splitlines()[0].split()[2])
+		if version and not version(self.version):
 			raise VersionError
-		if std:
-			compile_cpp_flags = '-std=%s %s' % (std, compile_cpp_flags)
-		External_CPP.__init__(self, ctx, compiler, 'llvm-ar',
-			compile_cpp_flags, link_static_flags, link_shared_flags, link_exe_flags)
+		External_CPP.__init__(self, ctx, compiler_cpp, 'llvm-ar',
+			compile_cpp_opts, link_static_flags, link_shared_flags, link_exe_flags)
+		self._set_std(std)
+
+	def _set_std(self, value):
+		if value == 'latest':
+			if self.version >= 3.5:
+				value = 'c++1z'
+			elif self.version >= 3.4:
+				value = 'c++14'
+			elif self.version >= 3.3:
+				value = 'c++11'
+			else:
+				value = None
+		External_CPP._set_std(self, value)
 External.available['clang'] = External_Clang
 
 
-class External_Python(External):
-	def __init__(self, ctx, version = None):
-		build_helper = self._get_exec('python-config', version, fmt = '%s%s')
-		link_flags = run_process([build_helper, '--ldflags'])[0]
-		External.__init__(self, ctx,
-			on_use_flags = {
-				'compile_cpp': {'opts': run_process([build_helper, '--cflags'])[0]},
-				'link_static': {'opts': link_flags},
-				'link_shared': {'opts': link_flags},
-				'link_exe': {'opts': link_flags},
-			})
+class SimpleExternal(External):
+	def __init__(self, ctx, **kwargs):
+		link_opts = kwargs.pop('link', '')
+		if link_opts:
+			kwargs['link_static'] = link_opts
+			kwargs['link_shared'] = link_opts
+			kwargs['link_exe'] = link_opts
+		on_use_flags = {}
+		for rule_name, opts in kwargs.items():
+			on_use_flags.setdefault(rule_name, {})['opts'] = opts
+		External.__init__(self, ctx, on_use_flags = on_use_flags)
+
+
+class External_pthread(SimpleExternal):
+	def __init__(self, ctx):
+		SimpleExternal.__init__(self, ctx, link = '-pthread', compile_cpp = '-pthread')
+External.available['pthread'] = External_pthread
+
+
+class External_Python(SimpleExternal):
+	def __init__(self, ctx, version = None, build_helper = 'python-config'):
+		link_opts = run_process([build_helper, '--ldflags'])[0]
+		python_lib = list(filter(lambda entry: entry.startswith('-lpython'), link_opts.split()))
+		self.version = Version(python_lib.pop().replace('-lpython', ''))
+		if version and not version(self.version):
+			raise VersionError
+		SimpleExternal.__init__(self, ctx, link = link_opts,
+			compile_cpp = run_process([build_helper, '--cflags'])[0])
 External.available['python'] = External_Python
+
+
+def create_build_helper_external(name, build_helper, **kwargs):
+	version_query = kwargs.pop('version_query', None)
+	version_parser = kwargs.pop('version_parser', None)
+	if version_query:
+		class TempExternal(SimpleExternal):
+			def __init__(self, ctx, version = None):
+				version_str = run_process([build_helper] + version_query.split())[0]
+				if version_parser:
+					version_str = version_parser(version_str)
+				self.version = Version(version_str)
+				if version and not version(self.version):
+					raise VersionError
+				for rule_name in list(kwargs.keys()):
+					kwargs[rule_name] = run_process([build_helper] + kwargs[rule_name].split())[0]
+				SimpleExternal.__init__(self, ctx, **kwargs)
+	else:
+		class TempExternal(SimpleExternal):
+			def __init__(self, ctx):
+				for rule_name in list(kwargs.keys()):
+					kwargs[rule_name] = run_process([build_helper] + kwargs[rule_name].split())[0]
+				SimpleExternal.__init__(self, ctx, **kwargs)
+	TempExternal.__name__ = 'External_' + name.replace('-', '_')
+	External.available[name] = TempExternal
+	return TempExternal
+
+
+def define_pkg_config_external(name):
+	return create_build_helper_external(name, 'pkg-config',
+		version_query = '%s --modversion' % name,
+		link = '%s --libs' % name, compile_cpp = '%s --cflags' % name)
+
+
+def define_non_pkg_config_externals():
+	for (tool, ldopt, cxxopt) in [
+		('fltk-config',     '--ldflags', '--cxxflags'),
+		('llvm-config',     '--libs',    '--cppflags'),
+		('odbc_config',     '--libs',    '--cflags'),
+		('root-config',     '--libs',    '--cflags'),
+		('wx-config',       '--libs',    '--cxxflags'),
+	]:
+		create_build_helper_external(tool.split('-')[0].split('_')[0], tool,
+			link = ldopt, compile_cpp = cxxopt, version_query = '--version',
+			version_parser = lambda version_str: version_str.split()[-1])
+define_non_pkg_config_externals()
 
 
 class External_SWIG(External):
 	def __init__(self, ctx, version = None):
-		installed_version = ''
+		self.version = None
 		for version_line in run_process(['swig', '-version'])[0].splitlines():
 			if 'version' in version_line.lower():
-				installed_version = version_line.split()[-1]
+				self.version = Version(version_line.split()[-1])
 				break
-		if version and not version.check(installed_version):
+		if version and not version(self.version):
 			raise VersionError
 		External.__init__(self, ctx)
 		self._ctx = ctx
@@ -458,7 +570,7 @@ class Registry(object):
 				for target in targets:
 					target.build_rule = rules_unique.setdefault(target.build_rule.name, target.build_rule)
 
-		write_rules = list(sorted(rules_unique.values(), key = lambda r: r.name))
+		write_rules = sorted(rules_unique.values(), key = lambda r: r.name)
 		write_targets = list(map(lambda t_th: t_th[0], target_hash_list))
 		return (write_rules, write_targets)
 
@@ -469,7 +581,7 @@ class Platform(object):
 
 	def get_required_flags(self, target_type, compiler_dict):
 		required_flags = {}
-		for compiler in compiler_dict.values():
+		for compiler in sorted(compiler_dict.values()):
 			for rule_name, flags in compiler.enforced_flags_by_target_type.get(target_type, {}).items():
 				for opt_name, opts in flags.items():
 					required_flags.setdefault(rule_name, {}).setdefault(opt_name, []).extend(opts)
@@ -494,7 +606,7 @@ class Context(object):
 		return construct_external(self, *args, **kwargs)
 
 	def find_rule(self, name): # return a new instance
-		for compiler in self.compiler.values():
+		for compiler in sorted(self.compiler.values()):
 			for r in compiler.rules:
 				if r.name == name:
 					return Rule(r.name, r.cmd, r.desc, r.defaults, **dict(r.params))
@@ -503,7 +615,7 @@ class Context(object):
 		def find_ext_handler(name):
 			result = set()
 			ext = os.path.splitext(name)[1]
-			for compiler in self.compiler.values():
+			for compiler in sorted(self.compiler.values()):
 				if ext in compiler.ext_handlers:
 					result.add(compiler.ext_handlers[ext])
 			return result
@@ -548,30 +660,30 @@ class Context(object):
 	def link(self, output_name, rule_name, input_list, implicit_input_list,
 			add_self_to_on_use_inputs, ensure_flags_by_rule, **kwargs):
 		input_list = self.force_build_source(input_list)
-		obj_sources = {}
+		input_list_rules = []
 		env_list = []
 		for obj in input_list:
 			input_rules = self.find_handlers(obj)
 			if len(input_rules) == 1:
-				obj_sources.setdefault(input_rules.pop(), []).append(obj)
+				input_list_rules.append((input_rules.pop(), obj))
 			elif not input_rules:
 				env_list.append(obj)
 			else:
 				raise Exception('Found multiple rules (%s) to generate object from %s' % (repr(input_rules), repr(obj)))
-		result = []
 		compiler_opts = kwargs.pop('compiler_opts', None)
-		for input_list in obj_sources.values():
-			for input_obj in input_list:
-				result.append(self.object_file(input_obj.name,
-					input_list = self._implicit_object_input + [input_obj], compiler_opts = compiler_opts))
-		input_list = result + env_list
-		input_list += implicit_input_list + add_rule_vars(opts = kwargs.pop('linker_opts', None))
+		input_list_new = []
+		for obj_rule_name, input_obj in input_list_rules:
+			input_list_new.append(self.object_file(input_obj.name,
+				input_list = self._implicit_object_input + [input_obj], compiler_opts = compiler_opts))
+		input_list_new.extend(env_list)
+		input_list_new.extend(implicit_input_list)
+		input_list_new.extend(add_rule_vars(opts = kwargs.pop('linker_opts', None)))
 
 		ensure_flags_processed_targets = set()
 		def do_ensure_flags(t):
 			flags = t.get_build_flags()
 			ensure_flags = ensure_flags_by_rule.get(t.build_rule.name, {})
-			for opt_key, opt_list in ensure_flags.items():
+			for opt_key, opt_list in sorted(ensure_flags.items()):
 				for opt in opt_list:
 					if opt not in flags.get(opt_key, ''):
 						t.build_src += add_rule_vars(opts = opt)
@@ -583,7 +695,7 @@ class Context(object):
 			return t
 
 		return do_ensure_flags(self.create_target(output_name, rule_name = rule_name,
-			input_list = input_list, add_self_to_on_use_inputs = add_self_to_on_use_inputs, **kwargs))
+			input_list = input_list_new, add_self_to_on_use_inputs = add_self_to_on_use_inputs, **kwargs))
 
 	def shared_library(self, lib_name, input_list, **kwargs):
 		(lib_name, ext) = get_normed_name(lib_name, self.platform.extensions['shared'])
@@ -629,6 +741,19 @@ def default_ctx_call(exec_dict, fun, keyword_only = False):
 	return lambda *args, **kwargs: fun(exec_dict['default_context'], *args, **kwargs)
 
 
+def create_registered(registry, cls):
+	def create_registered_cls(*args, **kwargs):
+		target = cls(*args, **kwargs)
+		return registry.register_target(target)
+	return create_registered_cls
+
+
+def create_external(ctx, name, **kwargs):
+	version = kwargs.pop('version', None)
+	external = create_build_helper_external(name, **kwargs)
+	return construct_external(ctx, name, version = version)
+
+
 def generate_build_file(bfn, ofn):
 	compiler = {}
 	platform = Platform()
@@ -650,8 +775,10 @@ def generate_build_file(bfn, ofn):
 		'executable': default_ctx_call(exec_globals, Context.executable),
 		'shared_library': default_ctx_call(exec_globals, Context.shared_library),
 		'static_library': default_ctx_call(exec_globals, Context.static_library),
-		'BuildSource': default_ctx_call(exec_globals, BuildSource, keyword_only = True),
-		'BuildTarget': default_ctx_call(exec_globals, BuildTarget, keyword_only = True),
+		'create_external': default_ctx_call(exec_globals, create_external),
+		'BuildSource': BuildSource,
+		'BuildTarget': create_registered(registry, BuildTarget),
+		'BuildTargetFree': BuildTarget,
 		'External': default_ctx_call(exec_globals, External, keyword_only = True),
 		'Context': create_ctx,
 		'InputFile': InputFile,
@@ -669,25 +796,41 @@ def generate_build_file(bfn, ofn):
 		writer.set_default(exec_globals['default_targets'])
 
 def main():
-	try:
-		import argparse
-		parser = argparse.ArgumentParser()
-		parser.add_argument('build_file', nargs=1)
-		parser.add_argument('--output', nargs=1, default = ['build.ninja'],
-			help = 'name of output build file')
-		args = parser.parse_args()
-		(bfn, ofn) = (args.build_file[0], args.output[0])
-	except ImportError:
-		import optparse
-		parser = optparse.OptionParser(usage = 'pyrate [options] build_file')
-		parser.add_option('', '--output', default = 'build.ninja',
-			help = 'name of output build file', dest='output')
-		(args, posargs) = parser.parse_args()
-		(bfn, ofn) = (posargs[0], args.output)
+	def parse_arguments():
+		try:
+			import argparse
+			parser = argparse.ArgumentParser()
+			parser.add_argument('build_file', nargs = '?', default = 'build.py',
+				help = 'name of the input file - default: build.py')
+			parser.add_argument('-V', '--version', action = 'version',
+				version = 'pyrate version ' + __version__)
+			parser.add_argument('-o', '--output', nargs = 1, default = ['build.ninja'],
+				help = 'name of output build file')
+			args = parser.parse_args()
+			return ([args.build_file], args.output[0])
+		except ImportError:
+			import optparse
+			parser = optparse.OptionParser(usage = 'pyrate [options] build_file')
+			parser.add_option('-V', '--version', action='store_true', help = 'display version')
+			parser.add_option('-o', '--output', default = 'build.ninja',
+				help = 'name of output build file', dest='output')
+			(args, posargs) = parser.parse_args()
+			if args.version:
+				sys.stderr.write('pyrate version ' + __version__ + '\n')
+				sys.exit(os.EX_OK)
+			return (posargs, args.output)
+	(bfn_list, ofn) = parse_arguments()
+	if len(bfn_list) == 0:
+		bfn = 'build.py'
+	elif len(bfn_list) == 1:
+		bfn = bfn_list[0]
+	else:
+		sys.stderr.write('too many build_file arguments provided! %s\n' % repr(bfn_list))
+		return os.EX_USAGE
 
 	if os.path.dirname(bfn):
 		os.chdir(os.path.dirname(bfn))
 	generate_build_file(os.path.basename(bfn), ofn)
 
 if __name__ == '__main__':
-	main()
+	sys.exit(main())

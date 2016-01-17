@@ -28,16 +28,12 @@ rule swig_cpp_python
   command = swig -c++ -python -I. ${opts} -module ${module_name} -o $out $in
   description = swig(C++ -> python) $out
 
-build py_foo_f075f85823ee689bd3034bb7a1d086a9.o: compile_cpp py_foo.cpp
-  opts = -O3
 build foo_a00794ba68f424547f768bebc6282496.o: compile_cpp foo.cpp
   opts = -O3
-build libFoo.a: link_static py_foo_f075f85823ee689bd3034bb7a1d086a9.o foo_a00794ba68f424547f768bebc6282496.o
-build py_foo_e9a5dd8550e7204d577f04ffc9d84264.o: compile_cpp py_foo.cpp
-  opts = -fPIC
+build libFoo.a: link_static foo_a00794ba68f424547f768bebc6282496.o
 build foo_e63d2608d620b1e1f96f610d320a7dbf.o: compile_cpp foo.cpp
   opts = -fPIC
-build libFoo.so: link_shared py_foo_e9a5dd8550e7204d577f04ffc9d84264.o foo_e63d2608d620b1e1f96f610d320a7dbf.o
+build libFoo.so: link_shared foo_e63d2608d620b1e1f96f610d320a7dbf.o
 build mylib.cpp: swig_cpp_python mylib.i
   module_name = mylib
 build mylib.o: compile_cpp mylib.cpp

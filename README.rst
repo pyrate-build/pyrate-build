@@ -144,6 +144,35 @@ that is used by the external package finder. This allows for example to write
 Currently only a small number of built in external packages are available (listed under **Externals**),
 but it is easy to add new packages that are recognized.
 
+In order to simplify the creation of external packages that already provide a build configuration tool
+to query version, linker or compiler options, **pyrate** provides the function:
+
+-  ``create_external(name, build_helper, ...)``
+
+It requires to define a name for the external package and supplying the build configuration tool.
+The values of additional parameters are interpreted as command line options for the build configuration tool.
+The name of these additional parameters specify the name of the
+rule that gets supplied with the flags given by the output of the build configuration tool.
+However there are four special parameters that have a special meaning:
+
+-  ``version_query`` - similar to the other parameters, the value of this parameter is used as build
+   configuration tool option to determine the current version of the external package.
+   As a consequence of providing this option, the resulting external package will support the parameter ``version``.
+-  ``version_parser`` - this parameter allows to supply a function that parses the version string
+   provided by the build configuration tool and is only used if ``version_query`` is given.
+-  ``version`` - specifies required version (eg. ``version >= 11.5``) and can only be used if
+   ``version_query`` is given
+-  ``link = opts`` is equivalent to specifying ``link_shared = opts``, ``link_static = opts`` and
+   ``link_exe = opts``
+
+The following example recreates the builtin external package wxWidgets:
+
+.. code:: python
+
+    my_wxwidgets = create_external('wxwidgets5', build_helper = 'wx-config',
+        version_query = '--version', link = '--libs', compile_cpp = '--cxxflags')
+
+
 Configuration of the build environment
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
@@ -171,35 +200,48 @@ not be overwritten.
 Externals
 ---------
 
-Currently the following built in externals are supported (listed with
-possible ``find_external`` arguments):
+Currently the following builtin externals are supported (listed with all possible ``find_external`` arguments):
 
-- gcc
+- ``gcc``
 
   * ``version`` - specifies required version (eg. ``version >= 5.2``)
-  * ``std`` - C/C++ language standard version (eg. gnu++14)
+  * ``std`` - C/C++ language standard version (eg. ``'gnu++14'`` or ``'latest'``).
+    A property with the same name allows to also set this value on an existing external (eg. ``compiler['C++'].std = 'latest'``).
   * ``compiler_flags`` - flags that are used during the compilation stage
   * ``static_flags``, ``shared_flags``, ``exe_flags`` - flags that are used during the linking stage
 
-- clang
+- ``clang``
 
   * ``version`` - specifies required version (eg. ``version > 3.5``)
-  * ``std`` - C/C++ language standard version (eg. c++14)
+  * ``std`` - C/C++ language standard version (eg. ``'gnu++14'`` or ``'latest'``).
+    A property with the same name allows to also set this value on an existing external (eg. ``compiler['C++'].std = 'latest'``).
   * ``compiler_flags`` - flags that are used during the compilation stage
   * ``static_flags``, ``shared_flags``, ``exe_flags`` - flags that are used during the linking stage
 
-  * ``version`` - specifies required version (eg. ``version >= 2.6``)
-
-- python
-
-  * ``version`` - specifies required version (eg. ``version >= 2.6``)
-
-- swig - The swig package also provides a member function to describe the generation of automated interface code
+- ``swig`` - The swig package also provides the member function ``wrapper`` to describe the generation of automated interface code
 
   * ``version`` - specifies required version (eg. ``version > '3.0.2'``)
   * ``wrapper(target_language, library_name, interface_filename, libs = [<targets>...])``
 
-- pthread - posix thread library
+- ``pthread`` - posix thread library
+
+The following list contains all builtin externals with a single ``find_external`` parameter ``version``,
+that specifies the required version (eg. ``version >= 2.6``):
+
+- ``fltk`` - FLTK GUI Library
+- ``llvm`` - LLVM compiler infrastructure libraries
+- ``odbc`` - Open Database Connectivity middleware
+- ``root`` - Library for large scale data analysis
+- ``wx`` - wxWidgets GUI Toolkit
+
+Many more externals are available through the integration with ``pkg-config``. The full list
+of available packages on a system can be queried with:
+
+.. code:: sh
+
+    pkg-config --list-all
+
+All packages listed in that overview can be accessed with the ``find_external`` function.
 
 Example
 -------

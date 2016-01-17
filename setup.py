@@ -6,9 +6,8 @@ version = None
 dn = os.path.dirname(__file__)
 with open(os.path.join(dn, 'pyrate.py')) as fp:
 	for line in fp:
-		if line.startswith('pyrate_version'):
-			version_tuple = line.split('=')[-1].strip().replace(' ', '')
-			version = version_tuple.lstrip('(').rstrip(')').replace(',', '.')
+		if line.startswith('__version__'):
+			version = line.split('=')[-1].strip().strip("'")
 			break
 
 setup(
