@@ -14,7 +14,6 @@
 #-#  limitations under the License.
 
 __version__ = '0.1.10'
-pyrate_version = tuple(__version__.split('.'))
 
 import os, sys
 try:
@@ -238,9 +237,10 @@ class BuildSource(object):
 
 class BuildTarget(BuildSource):
 	def __init__(self, name, build_rule, build_src,
-			on_use_inputs = None, on_use_deps = None, on_use_flags = None):
+			on_use_inputs = None, on_use_deps = None, on_use_flags = None, no_rename = False):
 		BuildSource.__init__(self, on_use_inputs, on_use_deps, on_use_flags)
 		(self.name, self.build_rule, self.build_src) = (name, build_rule, build_src)
+		self.no_rename = no_rename
 		self._drop_opt = False
 
 	def get_hash(self):
@@ -531,7 +531,10 @@ class Registry(object):
 		# deduplicate targets in target_list (and recursively in build_src) based on hash
 		target_hash_list = []
 		target_hash_seen = {}
+		priority_targets = {}
 		def update_target_hash_list(target, target_hash):
+			if target.no_rename:
+				priority_targets[target_hash] = target
 			if target_hash not in target_hash_seen:
 				target_hash_list.append((target, target_hash))
 				target_hash_seen[target_hash] = target
@@ -549,13 +552,20 @@ class Registry(object):
 		# find all used rules (and their parameters)
 		rules_used = {}
 		target_collisions = {}
+		target_no_rename = set()
 		for target, target_hash in target_hash_list:
+			target = priority_targets.get(target_hash, target)
 			target_opts = target.get_build_flags().get('opts', '')
 			rules_used.setdefault(target.build_rule.name, {}).setdefault(target_opts, []).append(target)
 			target_collisions.setdefault(target.name, []).append(target_hash)
+			if target.no_rename:
+				if target.name in target_no_rename:
+					raise Exception('Multiple targets (%r) requested no renaming!' % target.name)
+				target_no_rename.add(target.name)
 		# rename colliding targets
 		for target, target_hash in target_hash_list:
-			if len(set(target_collisions.get(target.name, []))) != 1:
+			target = priority_targets.get(target_hash, target)
+			if (len(set(target_collisions.get(target.name, []))) != 1) and not target.no_rename:
 				(root, ext) = os.path.splitext(target.name)
 				target.name = root + '_' + target_hash + ext
 
@@ -764,6 +774,7 @@ def create_external(ctx, name, **kwargs):
 
 
 def generate_build_file(bfn, ofn):
+	pyrate_version = Version(__version__)
 	compiler = {}
 	platform = Platform()
 	registry = Registry()

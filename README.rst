@@ -199,6 +199,46 @@ This is a dictionary that contains links to external packages that provide the b
 and parameters that are used to build the source. This dictionary can be modified, but should
 not be overwritten.
 
+It is possible to query the current version of **pyrate** via the variable:
+
+-  ``pyrate_version``
+
+.. code:: python
+
+    assert(pyrate_version > '0.1.8')
+
+Target Collision Avoidance
+~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+As explained above, **pyrate** will always ensure that targets with different inputs / options but
+same name will generate different output files (by appending a hash based suffix as needed).
+However it is possible to switch off the renaming of colliding targets for a **unique** target.
+Beware: Having two different targets that switch off the renaming with the option
+``no_rename = True`` will abort the build file generation.
+The following build configuration file:
+
+.. code:: python
+
+    ex1 = executable('example.bin', 'test.cpp', compiler_opts = '-O1')
+    ex2 = executable('example.bin', 'test.cpp', compiler_opts = '-O2')
+    ex3 = executable('example.bin', 'test.cpp', compiler_opts = '-O3')
+    ex4 = executable('example.bin', 'test.cpp', compiler_opts = '-O2', no_rename = True)
+    print('hash(ex1) = %s' % ex1.get_hash())
+    print('hash(ex2) = %s' % ex2.get_hash())
+    print('hash(ex3) = %s' % ex3.get_hash())
+    print('hash(ex4) = %s' % ex4.get_hash())
+
+will result (for example in an linux environment) in the generation of **three** object files named
+``test_<hash1>.o``, ``test_<hash2>.o``, ``test_<hash3>.o``, since there are only three different
+settings used during the compilation of ``test.cpp``.
+During the linking step, these object files will generate three binaries named
+``example.bin``, ``example_<hash4>.bin``, ``example_<hash5>.bin``.
+Where ``example.bin`` was compiled with the compiler option '-O2'. To identify which
+target belong to which hash, the ``<target_obj>.get_hash()`` function can be used.
+
+However it is **strongly** recommended to always ensure collision free names for executables
+and shared / static libraries.
+
 Externals
 ---------
 
