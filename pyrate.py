@@ -13,7 +13,7 @@
 #-#  See the License for the specific language governing permissions and
 #-#  limitations under the License.
 
-__version__ = '0.1.8'
+__version__ = '0.1.9'
 pyrate_version = tuple(__version__.split('.'))
 
 import os, sys
@@ -229,8 +229,11 @@ class BuildSource(object):
 		hash_tmp = get_dict_keys(self.on_use_inputs) + get_dict_keys(self.on_use_deps)
 		return calc_hash(none_to_obj(others, []) + hash_tmp + sorted(self.on_use_flags.items()))
 
-	def __repr__(self):
+	def __str__(self):
 		return nice_repr(self, 14)
+
+	def __repr__(self):
+		return '%s(%s)' % (self.__class__.__name__, self.__dict__)
 
 
 class BuildTarget(BuildSource):
@@ -264,7 +267,7 @@ class BuildTarget(BuildSource):
 	def get_build_flags(self):
 		def combine_flags(result, flags):
 			for key, value in flags.items():
-				if value:
+				if value and (value not in result.get(key, '')):
 					result[key] = ('%s %s' % (result.get(key, ''), value)).strip()
 		result = self._get_build(lambda e: e.on_use_flags, dict, combine_flags)
 		if self._drop_opt:
@@ -659,23 +662,29 @@ class Context(object):
 
 	def link(self, output_name, rule_name, input_list, implicit_input_list,
 			add_self_to_on_use_inputs, ensure_flags_by_rule, **kwargs):
+
 		input_list = self.force_build_source(input_list)
-		input_list_rules = []
 		env_list = []
-		for obj in input_list:
+		def preprocess_input_list(obj):
 			input_rules = self.find_handlers(obj)
 			if len(input_rules) == 1:
-				input_list_rules.append((input_rules.pop(), obj))
+				return (input_rules.pop(), obj)
 			elif not input_rules:
-				env_list.append(obj)
+				if not isinstance(obj, BuildTarget):
+					env_list.append(obj)
+				return (None, obj)
 			else:
 				raise Exception('Found multiple rules (%s) to generate object from %s' % (repr(input_rules), repr(obj)))
+		input_list_processed = list(map(preprocess_input_list, input_list))
+
 		compiler_opts = kwargs.pop('compiler_opts', None)
-		input_list_new = []
-		for obj_rule_name, input_obj in input_list_rules:
-			input_list_new.append(self.object_file(input_obj.name,
-				input_list = self._implicit_object_input + [input_obj], compiler_opts = compiler_opts))
-		input_list_new.extend(env_list)
+		def process_input_list(entry):
+			(obj_rule_name, obj) = entry
+			if obj_rule_name:
+				return self.object_file(obj.name, compiler_opts = compiler_opts,
+					input_list = self._implicit_object_input + [obj] + env_list)
+			return obj
+		input_list_new = list(map(process_input_list, input_list_processed))
 		input_list_new.extend(implicit_input_list)
 		input_list_new.extend(add_rule_vars(opts = kwargs.pop('linker_opts', None)))
 

@@ -13,5 +13,6 @@ rule link_exe
   description = link(exe) $out
 
 build test_cpp11.o: compile_cpp test_cpp11.cpp
+  opts = -pthread
 build example6.bin: link_exe test_cpp11.o
   opts = -pthread
