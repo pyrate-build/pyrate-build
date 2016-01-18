@@ -855,7 +855,7 @@ def main():
 				sys.exit(os.EX_OK)
 			return (posargs, args.output)
 	(bfn_list, ofn) = parse_arguments()
-	if len(bfn_list) == 0:
+	if not bfn_list:
 		bfn = 'build.py'
 	elif len(bfn_list) == 1:
 		bfn = bfn_list[0]

@@ -5,14 +5,17 @@ pyrate
 
 **pyrate** is a small python based build file generator targeting `ninja(s)`_.
 
-It allows to describe the build process of small projects in a very simple way.
-This description is then turned into ninja build files, that enable a very quick turnaround of project builds.
+It allows to describe the build process of small projects in a very simple way
+using a python based configuration file.
+This description is then turned into ninja build files, that enable a very
+quick turnaround of project builds.
 
 Quick HOWTO
 -----------
 
-The following presents the necessary steps to quickly test the waters with this tool. These commands will
-install **pyrate**, generate the ninja build file, build and execute a small executable:
+The following presents the necessary steps to quickly test the waters with this tool (assuming
+ninja is already installed). These commands will install **pyrate**, generate the ninja
+build file, build and execute a small executable:
 
 .. code:: sh
 
@@ -29,20 +32,36 @@ Installation
 **pyrate** is very easy to deploy - there are no particular installation steps to use it
 once the single script ``pyrate.py`` is available somewhere.
 It can even board the project directory of your project and simply get called from there.
-The only dependency of the software is having a working python installation.
+The only dependency to generate the ninja build files is having a working python installation.
 **pyrate** should work out of the box with all python versions between 2.4 and 3.4.
+To actually build the project, ninja has to be installed as well.
 
-It is also possible to get the latest version from the Python Package Index with:
+The latest release version of **pyrate** can be installed from the Python Package Index with:
 
 .. code:: sh
 
     pip install pyrate-build
 
+The latest development version can be retrieved from the github repository:
+
+.. code:: sh
+
+    git clone https://github.com/pyrate-build/pyrate-build
+
 Usage
 -----
 
-**pyrate** can be directly invoked with the name of the build configure script
-and the optional parameter ‘–output’ to specify the name of the generated ninja build file.
+The quickest way to execute **pyrate** is:
+
+.. code:: sh
+
+    pyrate
+
+Without any parameters, **pyrate** will use the build configuration script (*pyrate script*) named ``build.py``
+and create a ninja build file called ``build.ninja``.
+If another pyrate script should be used, this can be specified as a positional argument.
+The name of the created ninja build file can be customized using the option ``-o`` or ``--output``.
+The quick invocation shown above is therefore equivalent to the following invocation:
 
 .. code:: sh
 
@@ -50,6 +69,12 @@ and the optional parameter ‘–output’ to specify the name of the generated 
 
 When the script is started, it first changes the current directory to the directory
 containing the build configuration script, so all path names are relative to it.
+
+.. code:: sh
+
+    pyrate path/to/mybuild.py
+
+will therefore create the ninja build file path/to/build.ninja
 
 If **pyrate** is placed in a directory listed in the PATH environment variable (as automatically
 done by ``pip install pyrate-build``), the build configure script can be made executable to
@@ -62,7 +87,7 @@ invoke **pyrate** automatically by starting the build config script with:
 Build File Configuration Syntax
 -------------------------------
 
-The build configuration for *pyrate* is written in python - so the full power
+The build configuration for **pyrate** is written in python - so the full power
 of python can be used to construct and describe the build process.
 Several classes, functions and variables are available to ease and customize
 the configuration of the build process.
@@ -70,13 +95,24 @@ the configuration of the build process.
 Specifying build input
 ~~~~~~~~~~~~~~~~~~~~~~
 
-The build input files that is given to one of the functions described further below
-can be specified either as a space separated string or as a list of strings / items:
+In general, a build input list that can be used to construct a build target takes the form:
+
+- ``[<item1>, <item2>, ...]``
+
+Each item can be one of the following:
+
+-  a *string* is interpreted as a file name that is processed according to the rules specified by the packages in the ``compiler`` dictionary
+-  a *build target* as returned by the functions described in `Defining build targets`_ or explicitly defined
+-  an *external dependency* as returned by the functions described in `External dependencies`_ or explicitly defined
+-  or any other kind of ``BuildSource`` (explained later)
+
+Instead of a list, it is also possible to specify a space separated string of file names.
+Such a string is automatically split, so the following two build input lists behave identically:
 
 - ``"<file1> <file2> ..."``
-- ``["<file1>", "<file2>", ...]``
+- ``['<file1>', '<file2>', ...]``
 
-Besides specifying these lists it by hand, there are many ways to construct such a list.
+Besides specifying file names by hand, there are many ways to get a list of files.
 Common methods include calling the python function ``os.listdir`` or using the helper
 function ``match`` provided by **pyrate**:
 
@@ -88,14 +124,11 @@ The selector ``'*.cpp -test*.cpp test3.cpp *.h'`` for example selects all files 
 ‘.h’ and ‘.cpp’, with the exception of those ‘.cpp’ files that start with ‘test’ and are not
 called ‘test3.cpp’.
 
-The list of build inputs can also contain external packages, build targets or
-any other kind of ``BuildSource`` (explained later).
-
 Defining build targets
 ~~~~~~~~~~~~~~~~~~~~~~
 
 There are four global helper functions to define object files, executables and libraries based
-on a list of build inputs (which can be files, other targets or externals)
+on a list of build inputs (which can be files, other targets or externals - as shown in `Specifying build input`_):
 
 -  ``executable(name, input_list, compiler_opts = None, linker_opts = None)``
 -  ``shared_library(name, input_list, compiler_opts = None, linker_opts = None)``
@@ -105,46 +138,42 @@ on a list of build inputs (which can be files, other targets or externals)
 Each function returns a build target object, that can be used as input / dependency of another function.
 If multiple executables / libraries or object files with the same name but different inputs / options
 are defined, **pyrate** will ensure that the output will have a unique name
-(by appending a hash based suffix as needed).
-
-The input list of these functions may contain:
-
--  strings (file names that are processed according to the rules specified by the packages in the ``compiler`` dictionary),
--  build targets (as returned by these functions themselves) or
--  external dependencies (retrieved using ``find_external``, ``create_external`` or explicitly defined).
+(by appending a hash based suffix as needed). More details about this is available in `Target Collision Avoidance`_.
 
 These functions exist as global functions and as member functions of a so-called build context,
 that describes how these functions are processed. The global functions are just executing
 within the default build context.
 
 By default, all build targets that are defined by the above functions (or direct API calls) are built.
-In order to select only certain default targets, the global variable ``default_targets`` can be set
-to a *single target* or a *list of targets*:
+In order to select only certain default targets, the global variable ``default_targets`` can be used:
 
--  ``default_targets = [<target>,...]`` (``None`` == all targets are built)
+-  ``default_targets = [<target>,...]`` (list of targets), ``<target>`` (single target) or ``None`` (all targets are built)
 
 External dependencies
 ~~~~~~~~~~~~~~~~~~~~~
 
-The build environment / dependencies of external packages can be expressed using the
+The build environment / dependencies on external packages can be expressed using the
 following functions / variables:
 
 -  ``find_external(name, ...)``
 
-The function ``find_external`` searches for some external dependency (built-in or self-defined)
-with the given name and returns either None or a representation of the dependency.
+The function ``find_external`` searches for some external dependency (built-in, pkg-config package
+or self-defined) with the given name and returns either None or a representation of the dependency.
 The function takes additional positional and keyword arguments that depend on the external package.
 A common argument for this function is a version selector, that is supplied through a global variable:
 
 -  ``version``
 
-The comparisons with this variable (eg. ``version >= 4.1``) will create a version comparison instance
-that is used by the external package finder. This allows for example to write
-``find_external('clang', version >= 3.5)`` to discover a clang installation with version 3.5 or later.
-Since this facility is integrated with ``pkg-config``, a large number of external packages is
+The comparison between this variable (eg. ``version >= 4.1``) and a version specifier
+will return a function that can be used to check the expression and is used by the external package finder.
+A version specifier can be a string (``'0.1.2'``) or tuple (``(0, 1, 2)``) with an arbitrary number
+of subversion separators, or a floating point number (``1.2``).
+This allows for example to write ``find_external('clang', version >= 3.5)`` to discover a clang installation with version 3.5 or later.
+
+Since ``find_external`` also integrates with ``pkg-config``, a large number of external packages is
 available - in addition to a handful of builtin external packages with special implementation features.
 It is also possible to add new packages that are recognized.
-A list of the builtin packages is presented in the **Externals** section.
+A list of the builtin packages is presented in `Externals`_.
 
 In order to simplify the creation of external packages that already provide a build configuration tool
 to query version, linker or compiler options, **pyrate** provides the function:
@@ -155,30 +184,29 @@ It requires the user to define a name for the external package and to supply the
 The values of additional parameters are interpreted as command line options for the build configuration tool.
 The name of these additional parameters specify the name of the
 rule that gets supplied with the flags given by the output of the build configuration tool.
-However there are four special parameters that have a special meaning:
+However there are four parameters that have a special meaning:
 
 -  ``version_query`` - similar to the other parameters, the value of this parameter is used as build
    configuration tool option to determine the current version of the external package.
    As a consequence of providing this option, the resulting external package will support the parameter ``version``.
 -  ``version_parser`` - this parameter allows to supply a function that parses the version string
    provided by the build configuration tool and is only used if ``version_query`` is given.
--  ``version`` - specifies required version (eg. ``version >= 11.5``) and can only be used if
+-  ``version`` - specifies required version (eg. ``version = version >= 11.5``) and can only be used if
    ``version_query`` is given
 -  ``link = opts`` is equivalent to specifying ``link_shared = opts``, ``link_static = opts`` and
    ``link_exe = opts``
 
-The following example recreates the builtin external package wxWidgets:
+The following example recreates the builtin external package for wxWidgets:
 
 .. code:: python
 
     my_wxwidgets = create_external('wxwidgets', build_helper = 'wx-config',
         version_query = '--version', link = '--libs', compile_cpp = '--cxxflags')
 
-
 Configuration of the build environment
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-The build context allows for example to define implicit dependencies that are automatically
+A build context allows for example to define implicit dependencies that are automatically
 included in all generated object files, executables or libraries.
 An instance of such a build context is created with:
 
@@ -187,7 +215,8 @@ An instance of such a build context is created with:
    * ``implicit_input``, ``implicit_object_input``, ``implicit_static_library_input``,
      ``implicit_shared_library_input`` and ``implicit_executable_input``
 
-The default context used by these global function can be set using the variable:
+The default context used by the global functions presented in `Defining build targets`_
+can be set using the variable:
 
 -  ``default_context = Context(...)``
 
@@ -203,6 +232,8 @@ It is possible to query the current version of **pyrate** via the variable:
 
 -  ``pyrate_version``
 
+this allows to ensure a compatible version of **pyrate** with something along the lines of:
+
 .. code:: python
 
     assert(pyrate_version > '0.1.8')
@@ -210,7 +241,7 @@ It is possible to query the current version of **pyrate** via the variable:
 Target Collision Avoidance
 ~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-As explained above, **pyrate** will always ensure that targets with different inputs / options but
+As explained in `Defining build targets`_, **pyrate** will always ensure that targets with different inputs / options but
 same name will generate different output files (by appending a hash based suffix as needed).
 However it is possible to switch off the renaming of colliding targets for a **unique** target.
 Beware: Having two different targets that switch off the renaming with the option
