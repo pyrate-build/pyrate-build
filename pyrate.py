@@ -13,7 +13,7 @@
 #-#  See the License for the specific language governing permissions and
 #-#  limitations under the License.
 
-__version__ = '0.1.11'
+__version__ = '0.1.12'
 
 import os, sys
 try:
@@ -657,13 +657,33 @@ class Context(object):
 			implicit_object_input = None,
 			implicit_static_library_input = None,
 			implicit_shared_library_input = None,
-			implicit_executable_input = None):
+			implicit_executable_input = None,
+			basedir = None,
+			basedir_object_file = None,
+			basedir_static_library = None,
+			basedir_shared_library = None,
+			basedir_executable = None):
 		(self.registry, self.platform, self.compiler) = (registry, platform, compiler)
-		implicit_input = none_to_obj(implicit_input, [])
-		self._implicit_object_input = none_to_obj(implicit_object_input, []) + implicit_input
-		self._implicit_static_library_input = none_to_obj(implicit_static_library_input, []) + implicit_input
-		self._implicit_shared_library_input = none_to_obj(implicit_shared_library_input, []) + implicit_input
-		self._implicit_executable_input = none_to_obj(implicit_executable_input, []) + implicit_input
+		self.basedir = basedir
+		self.basedir_object_file = basedir_object_file
+		self.basedir_static_library = basedir_static_library
+		self.basedir_shared_libray = basedir_shared_library
+		self.basedir_executable = basedir_executable
+		self.implicit_input = implicit_input
+		self.implicit_object_input = implicit_object_input
+		self.implicit_static_library_input = implicit_static_library_input
+		self.implicit_shared_library_input = implicit_shared_library_input
+		self.implicit_executable_input = implicit_executable_input
+
+	def get_basedir(self, basedir):
+		if basedir:
+			return basedir
+		elif self.basedir:
+			return self.basedir
+		return ''
+
+	def get_implicit_input(self, implicit_input):
+		return none_to_obj(implicit_input, []) + none_to_obj(self.implicit_input, [])
 
 	def find_external(self, *args, **kwargs):
 		return construct_external(self, *args, **kwargs)
@@ -715,14 +735,14 @@ class Context(object):
 			input_rules.update(self.find_handlers(obj))
 		if len(input_rules) != 1:
 			raise Exception('Unable to find unique rule (%s) to generate %s' % (repr(input_rules), obj_name))
+		obj_name = os.path.join(self.get_basedir(self.basedir_object_file), obj_name)
 		(obj_name, obj_name_ext) = get_normed_name(obj_name, self.platform.extensions['object'])
 		return self.create_target(obj_name, rule_name = input_rules.pop(),
-			input_list = self._implicit_object_input + input_list + add_rule_vars(opts = compiler_opts),
+			input_list = self.get_implicit_input(self.implicit_object_input) + input_list + add_rule_vars(opts = compiler_opts),
 			add_self_to_on_use_inputs = True, **kwargs)
 
 	def link(self, output_name, rule_name, input_list, implicit_input_list,
 			add_self_to_on_use_inputs, ensure_flags_by_rule, **kwargs):
-
 		input_list = self.force_build_source(input_list)
 		env_list = []
 		def preprocess_input_list(obj):
@@ -742,7 +762,7 @@ class Context(object):
 			(obj_rule_name, obj) = entry
 			if obj_rule_name:
 				return self.object_file(obj.name, compiler_opts = compiler_opts,
-					input_list = self._implicit_object_input + [obj] + env_list)
+					input_list = self.get_implicit_input(self.implicit_object_input) + [obj] + env_list)
 			return obj
 		input_list_new = list(map(process_input_list, input_list_processed))
 		input_list_new.extend(implicit_input_list)
@@ -767,6 +787,7 @@ class Context(object):
 			input_list = input_list_new, add_self_to_on_use_inputs = add_self_to_on_use_inputs, **kwargs))
 
 	def shared_library(self, lib_name, input_list, **kwargs):
+		lib_name = os.path.join(self.get_basedir(self.basedir_shared_libray), lib_name)
 		(lib_name, ext) = get_normed_name(lib_name, self.platform.extensions['shared'])
 		link_name = lib_name.replace(self.platform.extensions['shared'], '')
 		if lib_name.startswith('lib'):
@@ -779,23 +800,25 @@ class Context(object):
 		return self.link(lib_name, rule_name = 'link_shared', 
 			input_list = input_list, add_self_to_on_use_inputs = False,
 			ensure_flags_by_rule = self.platform.get_required_flags('shared', self.compiler),
-			implicit_input_list = self._implicit_shared_library_input,
+			implicit_input_list = self.get_implicit_input(self.implicit_shared_library_input),
 			on_use_deps = on_use_deps, on_use_flags = on_use_flags, **kwargs)
 
 	def static_library(self, lib_name, input_list, **kwargs):
+		lib_name = os.path.join(self.get_basedir(self.basedir_static_library), lib_name)
 		(lib_name, ext) = get_normed_name(lib_name, self.platform.extensions['static'])
 		return self.link(lib_name, rule_name = 'link_static',
 			input_list = input_list, add_self_to_on_use_inputs = True,
 			ensure_flags_by_rule = self.platform.get_required_flags('static', self.compiler),
-			implicit_input_list = self._implicit_static_library_input, **kwargs)
+			implicit_input_list = self.get_implicit_input(self.implicit_static_library_input), **kwargs)
 
 	def executable(self, exe_name, input_list, **kwargs):
+		exe_name = os.path.join(self.get_basedir(self.basedir_executable), exe_name)
 		if not exe_name.endswith(self.platform.extensions['exe']):
 			exe_name += self.platform.extensions['exe']
 		return self.link(exe_name, rule_name = 'link_exe',
 			input_list = input_list, add_self_to_on_use_inputs = False,
 			ensure_flags_by_rule = self.platform.get_required_flags('exe', self.compiler),
-			implicit_input_list = self._implicit_executable_input, **kwargs)
+			implicit_input_list = self.get_implicit_input(self.implicit_executable_input), **kwargs)
 
 
 def create_ctx(ctx, **kwargs):
