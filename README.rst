@@ -1,4 +1,4 @@
-| |PyPI Version| |Build Status|
+| |PyPI Version| |Build Status| |Coverage|
 
 pyrate
 ======
@@ -335,3 +335,6 @@ Many more examples with an increasing level of complexity are available in the `
 .. |Build Status| image:: https://travis-ci.org/pyrate-build/pyrate-build.svg?branch=master
    :target: https://travis-ci.org/pyrate-build/pyrate-build
    :alt: Build Status
+
+.. |Coverage| image:: https://codecov.io/github/pyrate-build/pyrate-build/coverage.svg?branch=master
+   :target: https://codecov.io/github/pyrate-build/pyrate-build?branch=master

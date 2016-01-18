@@ -8,7 +8,7 @@ rule compile_cpp
 
 LINKER_EXE = clang++
 LINKER_EXE_FLAGS = -g
-rule link_exe_6dc1a356a32dc5c795e83452e621bb12
+rule link_exe_02d88567f767774db8842d31b1f7c977
   command = $LINKER_EXE $LINKER_EXE_FLAGS -L. -lFoo -o $out $in
   description = link(exe) $out
 
@@ -41,6 +41,6 @@ build mylib.o: compile_cpp mylib.cpp
 build _mylib.so: link_shared mylib.o | libFoo.so
   opts = -lpython2.7 -lpthread -ldl -lutil -lm -Xlinker -export-dynamic  -L. -lFoo
 build test.o: compile_cpp test.cpp
-build test.bin: link_exe_6dc1a356a32dc5c795e83452e621bb12 test.o | libFoo.so
+build test.bin: link_exe_02d88567f767774db8842d31b1f7c977 test.o | libFoo.so
 build test_cpp11.o: compile_cpp test_cpp11.cpp
-build test_cpp11.bin: link_exe_6dc1a356a32dc5c795e83452e621bb12 test_cpp11.o | libFoo.so
+build test_cpp11.bin: link_exe_02d88567f767774db8842d31b1f7c977 test_cpp11.o | libFoo.so

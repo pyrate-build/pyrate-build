@@ -1,6 +1,14 @@
 CXX = g++
 CXX_FLAGS = -std=c++11 -Wall -pedantic
-rule compile_cpp_9e7e117cdbd0eee7dbf3813514c6d9b7
+rule compile_cpp_50e231c45ccad62d877c42a85982d16f
+  command = $CXX $CXX_FLAGS -pthread -O3 -MMD -MT $out -MF $out.d -c $in -o $out
+  description = compile(cpp) $out
+  depfile = $out.d
+  deps = gcc
+
+CXX = g++
+CXX_FLAGS = -std=c++03 -Wall -pedantic
+rule compile_cpp_7b166a85cb715d5e9024bfbca36f082d
   command = $CXX $CXX_FLAGS -pthread -O3 -MMD -MT $out -MF $out.d -c $in -o $out
   description = compile(cpp) $out
   depfile = $out.d
@@ -8,11 +16,14 @@ rule compile_cpp_9e7e117cdbd0eee7dbf3813514c6d9b7
 
 LINKER_EXE = g++
 LINKER_EXE_FLAGS = -g
-rule link_exe
-  command = $LINKER_EXE $LINKER_EXE_FLAGS ${opts} -o $out $in
+rule link_exe_f01a3d1944853a0d27588672ee427329
+  command = $LINKER_EXE $LINKER_EXE_FLAGS -pthread -o $out $in
   description = link(exe) $out
 
-build test_cpp11.o: compile_cpp_9e7e117cdbd0eee7dbf3813514c6d9b7 test_cpp11.cpp
-build foo.o: compile_cpp_9e7e117cdbd0eee7dbf3813514c6d9b7 foo.cpp
-build example08.bin: link_exe test_cpp11.o foo.o
-  opts = -pthread
+build test_cpp11_8049cca6e9b67ab3c8824295a79162fa.o: compile_cpp_50e231c45ccad62d877c42a85982d16f test_cpp11.cpp
+build foo_8c8311fc35c09c3ea664b109dd768024.o: compile_cpp_50e231c45ccad62d877c42a85982d16f foo.cpp
+build example08_default_ctx.bin: link_exe_f01a3d1944853a0d27588672ee427329 test_cpp11_8049cca6e9b67ab3c8824295a79162fa.o foo_8c8311fc35c09c3ea664b109dd768024.o
+build test_cpp11_2020b366674fc10da964a97bb3245cd0.o: compile_cpp_7b166a85cb715d5e9024bfbca36f082d test_cpp11.cpp
+build foo_df37e009922692dc0209aeae62f273fc.o: compile_cpp_7b166a85cb715d5e9024bfbca36f082d foo.cpp
+build example08_own_ctx.bin: link_exe_f01a3d1944853a0d27588672ee427329 test_cpp11_2020b366674fc10da964a97bb3245cd0.o foo_df37e009922692dc0209aeae62f273fc.o
+default example08_default_ctx.bin

@@ -22,7 +22,7 @@ run_test() {
 }
 
 TESTS="example01.py example02.py example03.py example04.py example05.py"
-TESTS="$TESTS example06.py example07.py example09.py"
+TESTS="$TESTS example06.py example07.py example08.py example09.py"
 for EXAMPLE in $TESTS; do
 	run_test $EXAMPLE
 done

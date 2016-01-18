@@ -550,13 +550,13 @@ class Registry(object):
 
 		# identify targets with the same name but different configuration and
 		# find all used rules (and their parameters)
-		rules_used = {}
+		rules_used_flags = {}
 		target_collisions = {}
 		target_no_rename = set()
 		for target, target_hash in target_hash_list:
 			target = priority_targets.get(target_hash, target)
 			target_opts = target.get_build_flags().get('opts', '')
-			rules_used.setdefault(target.build_rule.name, {}).setdefault(target_opts, []).append(target)
+			rules_used_flags.setdefault(target.build_rule.get_hash(), {}).setdefault(target_opts, []).append(target)
 			target_collisions.setdefault(target.name, []).append(target_hash)
 			if target.no_rename:
 				if target.name in target_no_rename:
@@ -569,19 +569,28 @@ class Registry(object):
 				(root, ext) = os.path.splitext(target.name)
 				target.name = root + '_' + target_hash + ext
 
-		rules_unique = {}
 		# identify rules with a fixed set of parameters to fold them into the rule definition
-		for opts_of_targets in rules_used.values():
+		for opts_of_targets in rules_used_flags.values():
 			if len(opts_of_targets) == 1: # the rule 'rule_name' is always called with the same opts
 				target_opts, targets = list(opts_of_targets.items())[0]
 				if target_opts and (len(targets) > 1): # ignore if the rule is only called once anyway
 					for target in targets:
-						target.build_rule.name += '_' + calc_hash(target_opts)
 						target.build_rule.cmd = target.build_rule.cmd.replace('${opts}', target_opts)
+						target.build_rule.name += '_' + target.build_rule.get_hash()
 						target.drop_build_opt()
-			for targets in opts_of_targets.values():
-				for target in targets:
-					target.build_rule = rules_unique.setdefault(target.build_rule.name, target.build_rule)
+
+		# Unify all rules with the same hash in rules_unique,
+		# identify rules with different hashes and same name and rename collisions
+		rules_unique = {}
+		rules_collisions = {}
+		for target, target_hash in target_hash_list:
+			rule_hash = target.build_rule.get_hash()
+			target.build_rule = rules_unique.setdefault(rule_hash, target.build_rule)
+			rules_collisions.setdefault(target.build_rule.name, []).append(rule_hash)
+		for rule_hash_list in rules_collisions.values():
+			if len(set(rule_hash_list)) != 1:
+				for rule_hash in rule_hash_list:
+					rules_unique[rule_hash].name += '_' + target.build_rule.get_hash()
 
 		write_rules = sorted(rules_unique.values(), key = lambda r: r.name)
 		write_targets = list(map(lambda t_th: t_th[0], target_hash_list))
@@ -748,10 +757,10 @@ class Context(object):
 			implicit_input_list = self._implicit_executable_input, **kwargs)
 
 
-def create_ctx(**kwargs):
+def create_ctx(ctx, **kwargs):
 	platform = kwargs.pop('platform', ctx.platform)
 	compiler = kwargs.pop('compiler', ctx.compiler)
-	return Context(registry, platform, compiler, **kwargs)
+	return Context(ctx.registry, platform, compiler, **kwargs)
 
 
 def default_ctx_call(exec_dict, fun, keyword_only = False):
@@ -770,7 +779,10 @@ def create_registered(registry, cls):
 def create_external(ctx, name, **kwargs):
 	version = kwargs.pop('version', None)
 	external = create_build_helper_external(name, **kwargs)
-	return construct_external(ctx, name, version = version)
+	kwargs_external = {}
+	if version and ('version_query' in kwargs):
+		kwargs_external['version'] = version
+	return construct_external(ctx, name, **kwargs_external)
 
 
 def generate_build_file(bfn, ofn):
@@ -800,7 +812,7 @@ def generate_build_file(bfn, ofn):
 		'BuildTarget': create_registered(registry, BuildTarget),
 		'BuildTargetFree': BuildTarget,
 		'External': default_ctx_call(exec_globals, External, keyword_only = True),
-		'Context': create_ctx,
+		'Context': default_ctx_call(exec_globals, create_ctx),
 		'InputFile': InputFile,
 		'Rule': Rule,
 	})
