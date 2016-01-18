@@ -84,6 +84,9 @@ invoke **pyrate** automatically by starting the build config script with:
 
     #!/usr/bin/env pyrate
 
+*There is some experimental support for the generation of plain makefiles,
+which can be switched on with* ``-M`` *or* ``--makefile``.
+
 Build File Configuration Syntax
 -------------------------------
 

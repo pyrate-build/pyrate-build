@@ -173,6 +173,47 @@ class NinjaBuildFileWriter(object):
 			self._fp.write('  %s = %s\n' % key_value)
 
 
+class MakefileWriter(object):
+	def __init__(self, fn = 'build.make'):
+		self._fp = open(fn, 'w')
+		self._vars = set()
+	def set_var(self, key, value):
+		self._fp.write('%s := %s\n' % (key, value.strip()))
+	def set_default(self, target_list):
+		self._fp.write('all: %s\n' % str.join(' ', map(lambda t: t.name, target_list)))
+		self._fp.write('.DEFAULT_GOAL := all\n')
+	def write_rule(self, rule):
+		for key, value in sorted(rule.defaults.items()):
+			self.set_var(key, value)
+		self._fp.write('\n')
+	def write_target(self, target):
+		def replace_var(value, var_name, var_value):
+			return value.replace('$%s' % var_name, var_value).replace('${%s}' % var_name, var_value)
+		def replace_var_ref(value, var_name, new_var_name):
+			return replace_var(value, var_name, '$(%s)' % new_var_name)
+
+		flags = target.get_build_flags()
+		for opt, opt_value in sorted(flags.items()):
+			opt_hash = calc_hash([opt, opt_value])
+			if opt_hash not in self._vars:
+				self._vars.add(opt_hash)
+				self.set_var(opt + '_' + opt_hash, opt_value)
+		inputs = map(lambda t: t.name, target.get_build_inputs())
+		deps = inputs + map(lambda t: t.name, target.get_build_deps())
+		rule_params = dict(target.build_rule.params)
+		if rule_params.get('deps') == 'gcc':
+			depfile = replace_var(rule_params['depfile'], 'out', target.name)
+			self._fp.write('-include %s\n' % depfile)
+		self._fp.write('%s: %s\n' % (target.name, str.join(' ', deps)))
+		cmd = replace_var(replace_var(target.build_rule.cmd, 'out', target.name), 'in', str.join(' ', inputs))
+		for opt in sorted(target.build_rule.defaults.keys(), key = len, reverse = True):
+			cmd = replace_var_ref(cmd, opt, opt)
+		for opt in sorted(flags.keys(), key = len, reverse = True):
+			opt_hash = calc_hash([opt, flags[opt]])
+			cmd = replace_var_ref(cmd, opt, opt + '_' + opt_hash)
+		self._fp.write('\t%s\n\n' % cmd)
+
+
 class SelfReference(object):
 	def __init__(self, ref = None):
 		self._ref = ref
@@ -785,7 +826,7 @@ def create_external(ctx, name, **kwargs):
 	return construct_external(ctx, name, **kwargs_external)
 
 
-def generate_build_file(bfn, ofn):
+def generate_build_file(bfn, ofn, mode):
 	pyrate_version = Version(__version__)
 	compiler = {}
 	platform = Platform()
@@ -821,7 +862,10 @@ def generate_build_file(bfn, ofn):
 		exec(bfp.read(), exec_globals)
 
 	(rules, targets) = registry.write()
-	writer = NinjaBuildFileWriter(ofn)
+	if mode:
+		writer = MakefileWriter(ofn.replace('build.ninja', 'Makefile'))
+	else:
+		writer = NinjaBuildFileWriter(ofn)
 	list(map(writer.write_rule, rules))
 	list(map(writer.write_target, targets))
 	default_targets = exec_globals['default_targets']
@@ -839,22 +883,24 @@ def main():
 				help = 'name of the input file - default: build.py')
 			parser.add_argument('-V', '--version', action = 'version',
 				version = 'pyrate version ' + __version__)
+			parser.add_argument('-M', '--makefile', action = 'store_true', help = 'enable makefile mode')
 			parser.add_argument('-o', '--output', nargs = 1, default = ['build.ninja'],
 				help = 'name of output build file')
 			args = parser.parse_args()
-			return ([args.build_file], args.output[0])
+			return ([args.build_file], args.output[0], args.makefile)
 		except ImportError:
 			import optparse
 			parser = optparse.OptionParser(usage = 'pyrate [options] build_file')
 			parser.add_option('-V', '--version', action='store_true', help = 'display version')
+			parser.add_option('-M', '--makefile', action = 'store_true', help = 'enable makefile mode')
 			parser.add_option('-o', '--output', default = 'build.ninja',
 				help = 'name of output build file', dest='output')
 			(args, posargs) = parser.parse_args()
 			if args.version:
 				sys.stderr.write('pyrate version ' + __version__ + '\n')
 				sys.exit(os.EX_OK)
-			return (posargs, args.output)
-	(bfn_list, ofn) = parse_arguments()
+			return (posargs, args.output, args.makefile)
+	(bfn_list, ofn, mode) = parse_arguments()
 	if not bfn_list:
 		bfn = 'build.py'
 	elif len(bfn_list) == 1:
@@ -865,7 +911,7 @@ def main():
 
 	if os.path.dirname(bfn):
 		os.chdir(os.path.dirname(bfn))
-	generate_build_file(os.path.basename(bfn), ofn)
+	generate_build_file(os.path.basename(bfn), ofn, mode)
 
 if __name__ == '__main__':
 	sys.exit(main())
