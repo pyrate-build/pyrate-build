@@ -20,15 +20,15 @@ rule link_shared
 
 build foo.o: compile_cpp foo.cpp
   opts = -O3 -fPIC
-build libExample3a.so: link_shared foo.o
+build libExample03a.so: link_shared foo.o
 build test_1cfedb0e86f69ad43c2ba451c73bb586.o: compile_cpp test.cpp
-build example3a.bin: link_exe test_1cfedb0e86f69ad43c2ba451c73bb586.o | libExample3a.so
-  opts = -L. -lExample3a
-build libExample3b.so: link_shared foo.o
-build example3b.bin: link_exe test_1cfedb0e86f69ad43c2ba451c73bb586.o | libExample3b.so
-  opts = -L. -lExample3b
+build example03a.bin: link_exe test_1cfedb0e86f69ad43c2ba451c73bb586.o | libExample03a.so
+  opts = -L. -lExample03a
+build libExample03b.so: link_shared foo.o
+build example03b.bin: link_exe test_1cfedb0e86f69ad43c2ba451c73bb586.o | libExample03b.so
+  opts = -L. -lExample03b
 build test_ddc519d468dd216db1ca93f9f80094a0.o: compile_cpp test.cpp
   opts = -O0
-build example3c.bin: link_exe test_ddc519d468dd216db1ca93f9f80094a0.o | libExample3b.so
-  opts = -L. -lExample3b
-default example3c.bin
+build example03c.bin: link_exe test_ddc519d468dd216db1ca93f9f80094a0.o | libExample03b.so
+  opts = -L. -lExample03b
+default example03c.bin

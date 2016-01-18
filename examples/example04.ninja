@@ -14,9 +14,9 @@ rule link_exe
 
 build test_1cfedb0e86f69ad43c2ba451c73bb586.o: compile_cpp test.cpp
 build foo_a30d37c95b97852fd6dc8f4a1cf0a8e1.o: compile_cpp foo.cpp
-build example4_debug.bin: link_exe test_1cfedb0e86f69ad43c2ba451c73bb586.o foo_a30d37c95b97852fd6dc8f4a1cf0a8e1.o
+build example04_debug.bin: link_exe test_1cfedb0e86f69ad43c2ba451c73bb586.o foo_a30d37c95b97852fd6dc8f4a1cf0a8e1.o
 build test_ea06e0f15a7fb50d00928f0d8923fdef.o: compile_cpp test.cpp
   opts = -O3
 build foo_b323f8bc970eb8ff180102d50bd99af1.o: compile_cpp foo.cpp
   opts = -O3
-build example4_release.bin: link_exe test_ea06e0f15a7fb50d00928f0d8923fdef.o foo_b323f8bc970eb8ff180102d50bd99af1.o
+build example04_release.bin: link_exe test_ea06e0f15a7fb50d00928f0d8923fdef.o foo_b323f8bc970eb8ff180102d50bd99af1.o

@@ -13,7 +13,7 @@
 #-#  See the License for the specific language governing permissions and
 #-#  limitations under the License.
 
-__version__ = '0.1.10'
+__version__ = '0.1.11'
 
 import os, sys
 try:
@@ -812,8 +812,11 @@ def generate_build_file(bfn, ofn):
 	writer = NinjaBuildFileWriter(ofn)
 	list(map(writer.write_rule, rules))
 	list(map(writer.write_target, targets))
-	if exec_globals['default_targets']:
-		writer.set_default(exec_globals['default_targets'])
+	default_targets = exec_globals['default_targets']
+	if default_targets:
+		if not isinstance(default_targets, list):
+			default_targets = [default_targets]
+		writer.set_default(default_targets)
 
 def main():
 	def parse_arguments():

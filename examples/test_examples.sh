@@ -13,17 +13,30 @@ if [ -n "$(which coverage 2> /dev/null)" ]; then
 fi
 echo "Running $EXEC"
 
-TESTS="example1.py example2.py example3.py example4.py example5.py example6.py example7.py"
-if [ -n "$(which swig 2> /dev/null)" ]; then
-	TESTS="$TESTS example8.py example9.py"
-fi
-
-for EXAMPLE in $TESTS; do
+run_test() {
 	echo $EXAMPLE
 	EXAMPLE_NINJA="${EXAMPLE/.py/.ninja}"
 	$EXEC $EXAMPLE --output $EXAMPLE_NINJA.test
 	diff -u $EXAMPLE_NINJA $EXAMPLE_NINJA.test
 	echo "TEST OK"
+}
+
+TESTS="example01.py example02.py example03.py example04.py example05.py"
+TESTS="$TESTS example06.py example07.py example09.py"
+for EXAMPLE in $TESTS; do
+	run_test $EXAMPLE
+done
+
+set +e
+
+if [ -n "$(which swig 2> /dev/null)" ]; then
+	TESTS="$TESTS exampleS1.py exampleS2.py"
+fi
+if [ -n "$(which clang 2> /dev/null)" ]; then
+	TESTS="$TESTS exampleS2.py"
+fi
+for EXAMPLE in $TESTS; do
+	run_test $EXAMPLE
 done
 
 if [ -n "$(which coverage 2> /dev/null)" ]; then

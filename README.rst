@@ -119,7 +119,7 @@ within the default build context.
 
 By default, all build targets that are defined by the above functions (or direct API calls) are built.
 In order to select only certain default targets, the global variable ``default_targets`` can be set
-to a list of targets:
+to a *single target* or a *list of targets*:
 
 -  ``default_targets = [<target>,...]`` (``None`` == all targets are built)
 
@@ -231,7 +231,7 @@ The following build configuration file:
 will result (for example in an linux environment) in the generation of **three** object files named
 ``test_<hash1>.o``, ``test_<hash2>.o``, ``test_<hash3>.o``, since there are only three different
 settings used during the compilation of ``test.cpp``.
-During the linking step, these object files will generate three binaries named
+During the linking step, these object files will generate **three** binaries named
 ``example.bin``, ``example_<hash4>.bin``, ``example_<hash5>.bin``.
 Where ``example.bin`` was compiled with the compiler option '-O2'. To identify which
 target belong to which hash, the ``<target_obj>.get_hash()`` function can be used.
