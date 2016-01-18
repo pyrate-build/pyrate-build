@@ -198,8 +198,8 @@ class MakefileWriter(object):
 			if opt_hash not in self._vars:
 				self._vars.add(opt_hash)
 				self.set_var(opt + '_' + opt_hash, opt_value)
-		inputs = map(lambda t: t.name, target.get_build_inputs())
-		deps = inputs + map(lambda t: t.name, target.get_build_deps())
+		inputs = list(map(lambda t: t.name, target.get_build_inputs()))
+		deps = inputs + list(map(lambda t: t.name, target.get_build_deps()))
 		rule_params = dict(target.build_rule.params)
 		if rule_params.get('deps') == 'gcc':
 			depfile = replace_var(rule_params['depfile'], 'out', target.name)
@@ -880,12 +880,16 @@ def generate_build_file(bfn, ofn, mode):
 		'InputFile': InputFile,
 		'Rule': Rule,
 	})
+	if mode:
+		exec_globals['build_system'] = 'makefile'
+	else:
+		exec_globals['build_system'] = 'ninja'
 
 	with open(bfn) as bfp:
 		exec(bfp.read(), exec_globals)
 
 	(rules, targets) = registry.write()
-	if mode:
+	if exec_globals['build_system'] == 'makefile':
 		writer = MakefileWriter(ofn.replace('build.ninja', 'Makefile'))
 	else:
 		writer = NinjaBuildFileWriter(ofn)

@@ -21,14 +21,27 @@ run_test() {
 	echo "TEST OK"
 }
 
+run_test_make() {
+	echo $EXAMPLE
+	EXAMPLE_MAKE="${EXAMPLE/.py/.make}"
+	$EXEC $EXAMPLE --output $EXAMPLE_MAKE.test
+	diff -u $EXAMPLE_MAKE $EXAMPLE_MAKE.test
+	echo "TEST OK"
+}
+
 TESTS="example01.py example02.py example03.py example04.py example05.py"
 TESTS="$TESTS example06.py example07.py example08.py example09.py"
 for EXAMPLE in $TESTS; do
 	run_test $EXAMPLE
 done
 
+for EXAMPLE in exampleM1.py; do
+	run_test_make $EXAMPLE
+done
+
 set +e
 
+TESTS=""
 if [ -n "$(which swig 2> /dev/null)" ]; then
 	TESTS="$TESTS exampleS1.py exampleS2.py"
 fi
