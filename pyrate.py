@@ -66,7 +66,7 @@ class Version(object):
 	def __init__(self, value):
 		if isinstance(value, Version):
 			value = value.value
-		if isinstance(value, tuple): # (1,32,5)
+		if isinstance(value, tuple) or isinstance(value, list): # (1,32,5)
 			value = list(value)
 		elif isinstance(value, str): # '1.32.5'
 			value = list(map(int, value.split('.')))
@@ -897,7 +897,7 @@ def generate_build_file(bfn, ofn, mode):
 	list(map(writer.write_target, targets))
 	default_targets = exec_globals['default_targets']
 	if default_targets:
-		if not isinstance(default_targets, list):
+		if not (isinstance(default_targets, list) or isinstance(default_targets, tuple)):
 			default_targets = [default_targets]
 		writer.set_default(default_targets)
 
