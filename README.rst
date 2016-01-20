@@ -309,7 +309,9 @@ Currently the following builtin externals are supported (listed with all possibl
 - ``swig`` - The swig package also provides the member function ``wrapper`` to describe the generation of automated interface code
 
   * ``version`` - specifies required version (eg. ``version > '3.0.2'``)
-  * ``wrapper(target_language, library_name, interface_filename, libs = [<targets>...])``
+  * ``wrapper(target_language, library_name, interface_filename, libs = [<targets>...], context = None, ...)`` -
+    ``context`` allows to specify a different build context, additional keyword parameters are forwarded to the shared_library
+    invokation that creates the wrapper library
 
 - ``pthread`` - posix thread library
 

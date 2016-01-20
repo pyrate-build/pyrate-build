@@ -66,7 +66,7 @@ class Version(object):
 	def __init__(self, value):
 		if isinstance(value, Version):
 			value = value.value
-		if isinstance(value, tuple) or isinstance(value, list): # (1,32,5)
+		if isinstance(value, (list, tuple)): # (1,32,5)
 			value = list(value)
 		elif isinstance(value, str): # '1.32.5'
 			value = list(map(int, value.split('.')))
@@ -550,7 +550,7 @@ class External_SWIG(External):
 			[InputFile(ifile)] + add_rule_vars(opts = swig_opts, module_name = name),
 			on_use_inputs = {None: [SelfReference()]},
 			on_use_flags = wrapper_ext.on_use_flags)
-		return context.shared_library('_' + name, [wrapper_src, wrapper_ext] + none_to_obj(libs, []))
+		return context.shared_library('_' + name, [wrapper_src, wrapper_ext] + none_to_obj(libs, []), **kwargs)
 External.available['swig'] = External_SWIG
 
 
@@ -897,19 +897,19 @@ def generate_build_file(bfn, ofn, mode):
 	list(map(writer.write_target, targets))
 	default_targets = exec_globals['default_targets']
 	if default_targets:
-		if not (isinstance(default_targets, list) or isinstance(default_targets, tuple)):
+		if not isinstance(default_targets, (tuple, list)):
 			default_targets = [default_targets]
 		writer.set_default(default_targets)
 
 def main():
 	def parse_arguments():
+		version_info = 'pyrate version ' + __version__
 		try:
 			import argparse
 			parser = argparse.ArgumentParser()
 			parser.add_argument('build_file', nargs = '?', default = 'build.py',
 				help = 'name of the input file - default: build.py')
-			parser.add_argument('-V', '--version', action = 'version',
-				version = 'pyrate version ' + __version__)
+			parser.add_argument('-V', '--version', action = 'version', version = version_info)
 			parser.add_argument('-M', '--makefile', action = 'store_true', help = 'enable makefile mode')
 			parser.add_argument('-o', '--output', nargs = 1, default = ['build.ninja'],
 				help = 'name of output build file')
@@ -924,7 +924,7 @@ def main():
 				help = 'name of output build file', dest='output')
 			(args, posargs) = parser.parse_args()
 			if args.version:
-				sys.stderr.write('pyrate version ' + __version__ + '\n')
+				sys.stderr.write(version_info + '\n')
 				sys.exit(os.EX_OK)
 			return (posargs, args.output, args.makefile)
 	(bfn_list, ofn, mode) = parse_arguments()
