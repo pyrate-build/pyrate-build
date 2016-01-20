@@ -1,4 +1,4 @@
-| |PyPI Version| |Build Status| |Coverage|
+| |PyPI Version| |Build Status| |Coverage| |Gitter|
 
 pyrate
 ======
@@ -385,7 +385,6 @@ Many more examples with an increasing level of complexity are available in the `
 .. |Coverage| image:: https://codecov.io/github/pyrate-build/pyrate-build/coverage.svg?branch=master
    :target: https://codecov.io/github/pyrate-build/pyrate-build?branch=master
 
-
-.. image:: https://badges.gitter.im/pyrate-build/pyrate-build.svg
+.. |Gitter| image:: https://badges.gitter.im/pyrate-build/pyrate-build.svg
    :alt: Join the chat at https://gitter.im/pyrate-build/pyrate-build
    :target: https://gitter.im/pyrate-build/pyrate-build?utm_source=badge&utm_medium=badge&utm_campaign=pr-badge&utm_content=badge
