@@ -13,7 +13,7 @@
 #-#  See the License for the specific language governing permissions and
 #-#  limitations under the License.
 
-__version__ = '0.1.12'
+__version__ = '0.1.13'
 
 import os, sys
 try:
@@ -71,7 +71,10 @@ class Version(object):
 		elif isinstance(value, str): # '1.32.5'
 			value = list(map(int, value.split('.')))
 		else:
-			value = list(map(int, str(value).split('.'))) # 1.32
+			try:
+				value = list(map(int, str(value).split('.'))) # 1.32
+			except Exception:
+				raise VersionError('unable to parse version string %s' % repr(value))
 		self.value = tuple(value + [0] * (4 - len(value)))
 	def __repr__(self):
 		return 'Version(%s)' % str.join('.', map(repr, self.value))
@@ -345,6 +348,12 @@ class External(BuildSource):
 		self.rules = none_to_obj(rules, [])
 		self.ext_handlers = none_to_obj(ext_handlers, {})
 		self.enforced_flags_by_target_type = none_to_obj(enforced_flags_by_target_type, {})
+
+	def _check_version(self, version_req, version_str):
+		self.version = Version(version_str)
+		if version_req and not version_req(self.version):
+			raise VersionError('Unable to find correct version!')
+
 External.available = {}
 
 
@@ -357,8 +366,8 @@ def construct_external(ctx, value, *args, **kwargs):
 		return External.available[value](ctx, *args, **kwargs)
 	except ProcessError:
 		sys.stderr.write('Unable to find external %s\n' % value)
-	except VersionError:
-		sys.stderr.write('Unable to find correct version of %s\n' % value)
+	except VersionError as e:
+		sys.stderr.write('VersionError(%s): %s\n' % (value, e.args[0]))
 
 
 class External_CPP(External):
@@ -400,9 +409,7 @@ class External_GCC(External_CPP):
 			link_shared_opts = '-shared -g -fPIC',
 			link_exe_opts = '-g'):
 
-		self.version = Version(run_process([compile_cpp, '--version'])[0].splitlines()[0].split()[-1])
-		if version and not version(self.version):
-			raise VersionError
+		self._check_version(version, run_process([compile_cpp, '--version'])[0].splitlines()[0].split()[-1])
 		External_CPP.__init__(self, ctx, compile_cpp, 'gcc-ar',
 			compile_cpp_opts, link_static_opts, link_shared_opts, link_exe_opts)
 		self._set_std(std)
@@ -430,9 +437,7 @@ class External_Clang(External_CPP):
 			link_shared_opts = '-shared -g -fPIC',
 			link_exe_opts = '-g'):
 
-		self.version = Version(run_process([compile_cpp, '-v'])[1].splitlines()[0].split()[2])
-		if version and not version(self.version):
-			raise VersionError
+		self._check_version(version, run_process([compile_cpp, '-v'])[1].splitlines()[0].split()[2])
 		External_CPP.__init__(self, ctx, compile_cpp, 'llvm-ar',
 			compile_cpp_opts, link_static_opts, link_shared_opts, link_exe_opts)
 		self._set_std(std)
@@ -474,9 +479,7 @@ class External_Python(SimpleExternal):
 	def __init__(self, ctx, version = None, build_helper = 'python-config'):
 		link_opts = run_process([build_helper, '--ldflags'])[0]
 		python_lib = list(filter(lambda entry: entry.startswith('-lpython'), link_opts.split()))
-		self.version = Version(python_lib.pop().replace('-lpython', ''))
-		if version and not version(self.version):
-			raise VersionError
+		self._check_version(version, python_lib.pop().replace('-lpython', ''))
 		SimpleExternal.__init__(self, ctx, link = link_opts,
 			compile_cpp = run_process([build_helper, '--cflags'])[0])
 External.available['python'] = External_Python
@@ -491,9 +494,7 @@ def create_build_helper_external(name, build_helper, **kwargs):
 				version_str = run_process([build_helper] + version_query.split())[0]
 				if version_parser:
 					version_str = version_parser(version_str)
-				self.version = Version(version_str)
-				if version and not version(self.version):
-					raise VersionError
+				self._check_version(version, version_str)
 				for rule_name in list(kwargs.keys()):
 					kwargs[rule_name] = run_process([build_helper] + kwargs[rule_name].split())[0]
 				SimpleExternal.__init__(self, ctx, **kwargs)
@@ -530,13 +531,12 @@ define_non_pkg_config_externals()
 
 class External_SWIG(External):
 	def __init__(self, ctx, version = None):
-		self.version = None
+		version_str = ''
 		for version_line in run_process(['swig', '-version'])[0].splitlines():
 			if 'version' in version_line.lower():
-				self.version = Version(version_line.split()[-1])
+				version_str = version_line.split()[-1]
 				break
-		if version and not version(self.version):
-			raise VersionError
+		self._check_version(version, version_str)
 		External.__init__(self, ctx)
 		self._ctx = ctx
 
