@@ -136,11 +136,11 @@ class Delayed(object):
 			self._delayed_instance = self._cls(*self._args, **self._kwargs)
 		return self._delayed_instance
 	def __setattr__(self, name, value):
-		if name in ['_get_instance', '_delayed_instance', '_cls', '_args', '_kwargs']:
+		if name in ['_cls', '_args', '_kwargs', '_delayed_instance']:
 			return object.__setattr__(self, name, value)
 		return self._get_instance().__setattr__(name, value)
 	def __getattribute__(self, name):
-		if name in ['_get_instance', '_delayed_instance', '_cls', '_args', '_kwargs']:
+		if name in ['_cls', '_args', '_kwargs', '_delayed_instance', '_get_instance']:
 			return object.__getattribute__(self, name)
 		return self._get_instance().__getattribute__(name)
 	def __repr__(self):
@@ -224,11 +224,6 @@ class SelfReference(object):
 	def __repr__(self):
 		return 'self'
 
-	def replace_ref(self, value):
-		if isinstance(value, SelfReference):
-			return self._ref
-		return value
-
 
 class Rule(object):
 	def __init__(self, name, cmd, desc, defaults, **kwargs):
@@ -296,7 +291,9 @@ class BuildTarget(BuildSource):
 	def _get_build(self, src_getter, default, combine):
 		result = default()
 		for entry in self.build_src:
-			combine(result, src_getter(entry).get(self.build_rule.name, src_getter(entry).get(None, default())))
+			src_default = src_getter(entry).get(None, default())
+			new = src_getter(entry).get(self.build_rule.name, src_default)
+			combine(result, new)
 		return result
 
 	def get_build_inputs(self):
@@ -644,7 +641,7 @@ class Platform(object):
 
 	def get_required_flags(self, target_type, compiler_dict):
 		required_flags = {}
-		for compiler in sorted(compiler_dict.values()):
+		for lang, compiler in sorted(compiler_dict.items()):
 			for rule_name, flags in compiler.enforced_flags_by_target_type.get(target_type, {}).items():
 				for opt_name, opts in flags.items():
 					required_flags.setdefault(rule_name, {}).setdefault(opt_name, []).extend(opts)
@@ -689,16 +686,17 @@ class Context(object):
 		return construct_external(self, *args, **kwargs)
 
 	def find_rule(self, name): # return a new instance
-		for compiler in sorted(self.compiler.values()):
+		for lang, compiler in sorted(self.compiler.items()):
 			for r in compiler.rules:
 				if r.name == name:
 					return Rule(r.name, r.cmd, r.desc, r.defaults, **dict(r.params))
+		raise Exception('build rule %s not found!' % name)
 
 	def find_handlers(self, obj):
 		def find_ext_handler(name):
 			result = set()
-			ext = os.path.splitext(name)[1]
-			for compiler in sorted(self.compiler.values()):
+			ext = os.path.splitext(name)[1].lower()
+			for lang, compiler in sorted(self.compiler.items()):
 				if ext in compiler.ext_handlers:
 					result.add(compiler.ext_handlers[ext])
 			return result
@@ -840,13 +838,13 @@ def create_registered(registry, cls):
 	return create_registered_cls
 
 
-def create_external(ctx, name, **kwargs):
+def create_external(ctx, name, *args, **kwargs):
 	version = kwargs.pop('version', None)
 	external = create_build_helper_external(name, **kwargs)
 	kwargs_external = {}
 	if version and ('version_query' in kwargs):
 		kwargs_external['version'] = version
-	return construct_external(ctx, name, **kwargs_external)
+	return construct_external(ctx, name, *args, **kwargs_external)
 
 
 def generate_build_file(bfn, ofn, mode):
