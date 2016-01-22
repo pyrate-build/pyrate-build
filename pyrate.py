@@ -740,13 +740,16 @@ class Context(object):
 			add_self_to_on_use_inputs = True, **kwargs)
 
 	def link(self, output_name, rule_name, input_list, implicit_input_list,
-			add_self_to_on_use_inputs, ensure_flags_by_rule, **kwargs):
+			add_self_to_on_use_inputs, ensure_flags_by_rule, try_skip_obj = False, **kwargs):
 		input_list = self.force_build_source(input_list)
 		env_list = []
+		rules_found = set()
 		def preprocess_input_list(obj):
 			input_rules = self.find_handlers(obj)
 			if len(input_rules) == 1:
-				return (input_rules.pop(), obj)
+				rule_name = input_rules.pop()
+				rules_found.add(rule_name)
+				return (rule_name, obj)
 			elif not input_rules:
 				if not isinstance(obj, BuildTarget):
 					env_list.append(obj)
@@ -754,17 +757,6 @@ class Context(object):
 			else:
 				raise Exception('Found multiple rules (%s) to generate object from %s' % (repr(input_rules), repr(obj)))
 		input_list_processed = list(map(preprocess_input_list, input_list))
-
-		compiler_opts = kwargs.pop('compiler_opts', None)
-		def process_input_list(entry):
-			(obj_rule_name, obj) = entry
-			if obj_rule_name:
-				return self.object_file(obj.name, compiler_opts = compiler_opts,
-					input_list = self.get_implicit_input(self.implicit_object_input) + [obj] + env_list)
-			return obj
-		input_list_new = list(map(process_input_list, input_list_processed))
-		input_list_new.extend(implicit_input_list)
-		input_list_new.extend(add_rule_vars(opts = kwargs.pop('linker_opts', None)))
 
 		ensure_flags_processed_targets = set()
 		def do_ensure_flags(t):
@@ -781,6 +773,22 @@ class Context(object):
 						do_ensure_flags(src)
 			return t
 
+		compiler_opts = kwargs.pop('compiler_opts', None)
+		if try_skip_obj and (len(rules_found) == 1):
+			input_list_new = list(self.implicit_object_input)
+			input_list_new.extend(map(lambda obj_info: obj_info[1], input_list_processed))
+			input_list_new.extend(env_list + add_rule_vars(opts = compiler_opts))
+		else:
+			def process_input_list(entry):
+				(obj_rule_name, obj) = entry
+				if obj_rule_name:
+					return self.object_file(obj.name, compiler_opts = compiler_opts,
+						input_list = self.get_implicit_input(self.implicit_object_input) + [obj] + env_list)
+				return obj
+			input_list_new = list(map(process_input_list, input_list_processed))
+
+		input_list_new.extend(implicit_input_list)
+		input_list_new.extend(add_rule_vars(opts = kwargs.pop('linker_opts', None)))
 		return do_ensure_flags(self.create_target(output_name, rule_name = rule_name,
 			input_list = input_list_new, add_self_to_on_use_inputs = add_self_to_on_use_inputs, **kwargs))
 
