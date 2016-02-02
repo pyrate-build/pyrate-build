@@ -30,7 +30,7 @@ run_test_make() {
 }
 
 TESTS="example01.py example02.py example03.py example04.py example05.py"
-TESTS="$TESTS example06.py example07.py example08.py example09.py"
+TESTS="$TESTS example06.py example07.py example08.py example09.py example10.py"
 for EXAMPLE in $TESTS; do
 	run_test $EXAMPLE
 done
@@ -43,7 +43,7 @@ set +e
 
 TESTS=""
 if [ -n "$(which swig 2> /dev/null)" ]; then
-	TESTS="$TESTS exampleS1.py exampleS2.py"
+	TESTS="$TESTS exampleS1.py"
 fi
 if [ -n "$(which clang 2> /dev/null)" ]; then
 	TESTS="$TESTS exampleS2.py"

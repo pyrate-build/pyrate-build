@@ -13,7 +13,7 @@
 #-#  See the License for the specific language governing permissions and
 #-#  limitations under the License.
 
-__version__ = '0.1.13'
+__version__ = '0.2.0'
 
 import os, sys
 try:
@@ -153,10 +153,15 @@ class Delayed(object):
 class NinjaBuildFileWriter(object):
 	def __init__(self, fn = 'build.ninja'):
 		self._fp = open(fn, 'w')
+		self._vars = {}
 	def set_var(self, key, value):
-		self._fp.write('%s = %s\n' % (key, value.strip()))
-	def set_default(self, target_list):
-		self._fp.write('default %s\n' % str.join(' ', map(lambda t: t.name, target_list)))
+		if self._vars.get(key) != value:
+			self._fp.write('%s = %s\n' % (key, value.strip()))
+		self._vars[key] = value
+	def set_default(self, target_list, target_list_all):
+		self._fp.write('build all: phony %s\n' % str.join(' ', map(lambda t: t.name, target_list_all)))
+		if target_list != None:
+			self._fp.write('default %s\n' % str.join(' ', map(lambda t: t.name, target_list)))
 	def write_rule(self, rule):
 		for key, value in sorted(rule.defaults.items()):
 			self.set_var(key, value)
@@ -172,7 +177,7 @@ class NinjaBuildFileWriter(object):
 		if target.get_build_deps():
 			self._fp.write(' | %s' % str.join(' ', map(lambda t: t.name, target.get_build_deps())))
 		self._fp.write('\n')
-		for key_value in sorted(target.get_build_flags().items()):
+		for key_value in sorted(target.get_build_variables().items()):
 			self._fp.write('  %s = %s\n' % key_value)
 
 
@@ -182,9 +187,10 @@ class MakefileWriter(object):
 		self._vars = set()
 	def set_var(self, key, value):
 		self._fp.write('%s := %s\n' % (key, value.strip()))
-	def set_default(self, target_list):
-		self._fp.write('all: %s\n' % str.join(' ', map(lambda t: t.name, target_list)))
-		self._fp.write('.DEFAULT_GOAL := all\n')
+	def set_default(self, target_list, target_list_all):
+		self._fp.write('all: %s\n' % str.join(' ', map(lambda t: t.name, target_list_all)))
+		self._fp.write('default: %s\n' % str.join(' ', map(lambda t: t.name, target_list)))
+		self._fp.write('.DEFAULT_GOAL := default\n')
 	def write_rule(self, rule):
 		for key, value in sorted(rule.defaults.items()):
 			self.set_var(key, value)
@@ -195,8 +201,8 @@ class MakefileWriter(object):
 		def replace_var_ref(value, var_name, new_var_name):
 			return replace_var(value, var_name, '$(%s)' % new_var_name)
 
-		flags = target.get_build_flags()
-		for opt, opt_value in sorted(flags.items()):
+		variables = target.get_build_variables()
+		for opt, opt_value in sorted(variables.items()):
 			opt_hash = calc_hash([opt, opt_value])
 			if opt_hash not in self._vars:
 				self._vars.add(opt_hash)
@@ -211,8 +217,8 @@ class MakefileWriter(object):
 		cmd = replace_var(replace_var(target.build_rule.cmd, 'out', target.name), 'in', str.join(' ', inputs))
 		for opt in sorted(target.build_rule.defaults.keys(), key = len, reverse = True):
 			cmd = replace_var_ref(cmd, opt, opt)
-		for opt in sorted(flags.keys(), key = len, reverse = True):
-			opt_hash = calc_hash([opt, flags[opt]])
+		for opt in sorted(variables.keys(), key = len, reverse = True):
+			opt_hash = calc_hash([opt, variables[opt]])
 			cmd = replace_var_ref(cmd, opt, opt + '_' + opt_hash)
 		self._fp.write('\t%s\n\n' % cmd)
 
@@ -226,8 +232,8 @@ class SelfReference(object):
 
 
 class Rule(object):
-	def __init__(self, name, cmd, desc, defaults, **kwargs):
-		(self.name, self.cmd, self.desc, self.defaults) = (name, cmd, desc, defaults)
+	def __init__(self, connection, name, cmd, desc, defaults, **kwargs):
+		(self.connection, self.name, self.cmd, self.desc, self.defaults) = (connection, name, cmd, desc, defaults)
 		self.params = sorted(kwargs.items())
 
 	def get_hash(self):
@@ -238,10 +244,10 @@ class Rule(object):
 
 
 class BuildSource(object):
-	def __init__(self, on_use_inputs = None, on_use_deps = None, on_use_flags = None):
+	def __init__(self, on_use_inputs = None, on_use_deps = None, on_use_variables = None):
 		self.on_use_inputs = self._resolve_self(on_use_inputs)
 		self.on_use_deps = self._resolve_self(on_use_deps)
-		self.on_use_flags = dict(none_to_obj(on_use_flags, {}))
+		self.on_use_variables = dict(none_to_obj(on_use_variables, {}))
 
 	def _resolve_self(self, on_use_dict):
 		on_use_dict = none_to_obj(on_use_dict, {})
@@ -265,19 +271,16 @@ class BuildSource(object):
 						result.append(value.get_hash())
 			return result
 		hash_tmp = get_dict_keys(self.on_use_inputs) + get_dict_keys(self.on_use_deps)
-		return calc_hash(none_to_obj(others, []) + hash_tmp + sorted(self.on_use_flags.items()))
-
-	def __str__(self):
-		return nice_repr(self, 14)
+		return calc_hash(none_to_obj(others, []) + hash_tmp + sorted(self.on_use_variables.items()))
 
 	def __repr__(self):
-		return '%s(%s)' % (self.__class__.__name__, self.__dict__)
+		return nice_repr(self, 14)
 
 
 class BuildTarget(BuildSource):
 	def __init__(self, name, build_rule, build_src,
-			on_use_inputs = None, on_use_deps = None, on_use_flags = None, no_rename = False):
-		BuildSource.__init__(self, on_use_inputs, on_use_deps, on_use_flags)
+			on_use_inputs = None, on_use_deps = None, on_use_variables = None, no_rename = False):
+		BuildSource.__init__(self, on_use_inputs, on_use_deps, on_use_variables)
 		(self.name, self.build_rule, self.build_src) = (name, build_rule, build_src)
 		self.no_rename = no_rename
 		self._drop_opt = False
@@ -286,7 +289,7 @@ class BuildTarget(BuildSource):
 		return calc_hash([self.name, self.build_rule.get_hash(),
 			sorted(map(lambda t: t.get_hash(), self.get_build_inputs())),
 			sorted(map(lambda t: t.get_hash(), self.get_build_deps())),
-			sorted(self.get_build_flags().items())])
+			sorted(self.get_build_variables().items())])
 
 	def _get_build(self, src_getter, default, combine):
 		result = default()
@@ -305,14 +308,20 @@ class BuildTarget(BuildSource):
 	def drop_build_opt(self):
 		self._drop_opt = True
 
-	def get_build_flags(self):
-		def combine_flags(result, flags):
-			for key, value in flags.items():
-				if value and (value not in result.get(key, '')):
-					result[key] = ('%s %s' % (result.get(key, ''), value)).strip()
-		result = self._get_build(lambda e: e.on_use_flags, dict, combine_flags)
+	def get_build_variables(self):
+		def combine_variables(result, variables):
+			for key, values in variables.items():
+				for value in values:
+					opt_list = result.setdefault(key, [])
+					if value not in opt_list:
+						opt_list.append(value)
+		result = self._get_build(lambda e: e.on_use_variables, dict, combine_variables)
 		if self._drop_opt:
 			result.pop('opts', None)
+		for key in list(result):
+			tmp = str.join(' ', result.pop(key))
+			if tmp:
+				result[key] = tmp
 		return result
 
 
@@ -326,25 +335,28 @@ class InputFile(BuildSource):
 
 
 class RuleVariables(BuildSource):
-	def __init__(self, **kwargs):
-		BuildSource.__init__(self, on_use_flags = {None: kwargs})
+	def __init__(self, on_use_variables):
+		BuildSource.__init__(self, on_use_variables = on_use_variables)
 
 
 def add_rule_vars(**kwargs):
-	kwargs = list(filter(lambda key_value: key_value[1] != None, kwargs.items()))
-	if kwargs:
-		return [RuleVariables(**dict(kwargs))]
+	variables = {}
+	for key, value in kwargs.items():
+		if value:
+			variables.setdefault(key, []).append(value)
+	if variables:
+		return [RuleVariables(on_use_variables = {None: variables})]
 	return []
 
 
 class External(BuildSource):
-	def __init__(self, ctx, on_use_flags = None, rules = None, ext_handlers = None,
-			enforced_flags_by_target_type = None):
+	def __init__(self, ctx, on_use_variables = None, rules = None, target_types_by_ext = None,
+			required_inputs_by_target_type = None):
 		assert(ctx)
-		BuildSource.__init__(self, on_use_flags = on_use_flags)
+		BuildSource.__init__(self, on_use_variables = on_use_variables)
 		self.rules = none_to_obj(rules, [])
-		self.ext_handlers = none_to_obj(ext_handlers, {})
-		self.enforced_flags_by_target_type = none_to_obj(enforced_flags_by_target_type, {})
+		self.target_types_by_ext = none_to_obj(target_types_by_ext, {})
+		self.required_inputs_by_target_type = none_to_obj(required_inputs_by_target_type, {})
 
 	def _check_version(self, version_req, version_str):
 		self.version = Version(version_str)
@@ -354,61 +366,128 @@ class External(BuildSource):
 External.available = {}
 
 
-def construct_external(ctx, value, *args, **kwargs):
-	value == value.lower()
-	if value not in External.available:
-		if not define_pkg_config_external(value):
-			raise Exception('Unknown external %r' % value)
-	try:
-		return External.available[value](ctx, *args, **kwargs)
-	except ProcessError:
-		sys.stderr.write('Unable to find external %s\n' % value)
-	except VersionError as e:
-		sys.stderr.write('VersionError(%s): %s\n' % (value, e.args[0]))
+class External_SCM(External):
+	def _run(self, directory, *args):
+		dn = os.getcwd()
+		try:
+			os.chdir(directory)
+			return run_process(args)
+		except:
+			os.chdir(directory)
+			raise
 
 
-class External_CPP(External):
+class External_linker(External):
+	def __init__(self, ctx,
+			link_static, link_static_opts,
+			link_shared, link_shared_opts,
+			link_exe, link_exe_opts):
+		External.__init__(self, ctx,
+			rules = [
+				Rule(('object', 'static'), 'link_static',
+					'rm -f $out && $LINKER_STATIC $LINKER_STATIC_FLAGS ${opts} $out $in', 'link(static) $out',
+					{'LINKER_STATIC': link_static, 'LINKER_STATIC_FLAGS': link_static_opts}),
+				Rule(('object', 'shared'), 'link_shared',
+					'$LINKER_SHARED $LINKER_SHARED_FLAGS ${opts} -o $out $in', 'link(shared) $out',
+					{'LINKER_SHARED': link_shared, 'LINKER_SHARED_FLAGS': link_shared_opts}),
+				Rule(('object', 'exe'), 'link_exe',
+					'$LINKER_EXE $LINKER_EXE_FLAGS ${opts} -o $out $in', 'link(exe) $out',
+					{'LINKER_EXE': link_exe, 'LINKER_EXE_FLAGS': link_exe_opts})])
+
+
+class External_link_base(External_linker):
+	def __init__(self, ctx, link_static = 'ar', link_static_opts = 'rcs',
+			link_shared = 'ld', link_shared_opts = '-shared -fPIC',
+			link_exe = 'ld', link_exe_opts = ''):
+		External_linker.__init__(self, ctx,
+			link_static = link_static, link_static_opts = link_static_opts,
+			link_shared = link_shared, link_shared_opts = link_shared_opts,
+			link_exe = link_exe, link_exe_opts = link_exe_opts)
+External.available['link-base'] = External_link_base
+
+
+class External_link_gcc(External_linker):
+	def __init__(self, ctx, link_static = 'gcc-ar', link_static_opts = 'rcs',
+			link_shared = 'gcc', link_shared_opts = '-shared -fPIC',
+			link_exe = 'gcc', link_exe_opts = ''):
+		External_linker.__init__(self, ctx,
+			link_static = link_static, link_static_opts = link_static_opts,
+			link_shared = link_shared, link_shared_opts = link_shared_opts,
+			link_exe = link_exe, link_exe_opts = link_exe_opts)
+External.available['link-gcc'] = External_link_gcc
+
+
+class External_link_llvm(External_linker):
+	def __init__(self, ctx, link_static = 'llvm-ar', link_static_opts = 'rcs',
+			link_shared = 'clang', link_shared_opts = '-shared -fPIC',
+			link_exe = 'clang', link_exe_opts = ''):
+		External_linker.__init__(self, ctx,
+			link_static = link_static, link_static_opts = link_static_opts,
+			link_shared = link_shared, link_shared_opts = link_shared_opts,
+			link_exe = link_exe, link_exe_opts = link_exe_opts)
+External.available['link-llvm'] = External_link_llvm
+
+
+class External_SimpleCompiler(External): # C family compiler
 	std = property(lambda self: self._std, lambda self, value: self._set_std(value))
 
-	def __init__(self, ctx, compiler, linker, compile_cpp_opts,
-			link_static_opts, link_shared_opts, link_exe_opts):
+	def __init__(self, ctx, lang, compiler, compiler_opts, var_prefix, ext_list, req_input = {}):
 		self._std = None
-		self._compiler = compiler
-		self._compile_cpp_opts = compile_cpp_opts
-		self._compile_cpp_rule = Rule('compile_cpp',
-			'$CXX $CXX_FLAGS ${opts} -MMD -MT $out -MF $out.d -c $in -o $out', 'compile(cpp) $out',
-			{'CXX': self._compiler, 'CXX_FLAGS': self._compile_cpp_opts},
-			depfile = '$out.d', deps = 'gcc')
-		External.__init__(self, ctx,
-			rules = [self._compile_cpp_rule,
-				Rule('link_static', 'rm -f $out && $LINKER_STATIC $LINKER_STATIC_FLAGS ${opts} $out $in', 'link(static) $out',
-					{'LINKER_STATIC': linker, 'LINKER_STATIC_FLAGS': link_static_opts}),
-				Rule('link_shared', '$LINKER_SHARED $LINKER_SHARED_FLAGS ${opts} -o $out $in', 'link(shared) $out',
-					{'LINKER_SHARED': compiler, 'LINKER_SHARED_FLAGS': link_shared_opts}),
-				Rule('link_exe', '$LINKER_EXE $LINKER_EXE_FLAGS ${opts} -o $out $in', 'link(exe) $out',
-					{'LINKER_EXE': compiler, 'LINKER_EXE_FLAGS': link_exe_opts}),
+		self._var_prefix = var_prefix
+		self._compiler_opts = compiler_opts
+		self._compiler_variables = {var_prefix: compiler, var_prefix + '_FLAGS': self._compiler_opts}
+		required_inputs_by_target_type = {
+			'shared': [RuleVariables({'compile_' + lang: {'opts': ['-fPIC']}})],
+		}
+		for target_type in req_input:
+			required_inputs_by_target_type.setdefault(target_type, []).extend(req_input[target_type])
+		External.__init__(self, ctx, rules = [
+				Rule((lang, 'object'), 'compile_' + lang,
+					'$%s $%s_FLAGS ${opts} -MMD -MT $out -MF $out.d -c $in -o $out' % (var_prefix, var_prefix),
+					'compile(%s) $out' % lang, self._compiler_variables,
+					depfile = '$out.d', deps = 'gcc'),
+				Rule((lang, 'exe'), 'compile_link_exe_' + lang,
+					'$%s $%s_FLAGS ${opts} -MMD -MT $out -MF $out.d $in -o $out' % (var_prefix, var_prefix),
+					'compile+link(%s) $out' % lang, self._compiler_variables,
+					depfile = '$out.d', deps = 'gcc'),
+				Rule((lang, 'shared'), 'compile_link_shared_' + lang,
+					'$%s $%s_FLAGS ${opts} -shared -fPIC -MMD -MT $out -MF $out.d $in -o $out' % (var_prefix, var_prefix),
+					'compile+link(%s) $out' % lang, self._compiler_variables,
+					depfile = '$out.d', deps = 'gcc'),
 			],
-			ext_handlers = {'.cpp': 'compile_cpp', '.cxx': 'compile_cpp', '.cc': 'compile_cpp'},
-			enforced_flags_by_target_type = {'shared': {'compile_cpp': {'opts': ['-fPIC']}}})
+			target_types_by_ext = dict.fromkeys(ext_list, lang),
+			required_inputs_by_target_type = required_inputs_by_target_type)
 
 	def _set_std(self, value):
 		self._std = value
 		if not value:
-			self._compile_cpp_rule.defaults['CXX_FLAGS'] = self._compile_cpp_opts
+			opts = self._compiler_opts
 		else:
-			self._compile_cpp_rule.defaults['CXX_FLAGS'] = ('-std=%s ' % value) + self._compile_cpp_opts
+			opts = ('-std=%s ' % value) + self._compiler_opts
+		self._compiler_variables[self._var_prefix + '_FLAGS'] = opts
 
 
-class External_GCC(External_CPP):
-	def __init__(self, ctx, version = None, std = None, compile_cpp = 'g++',
-			compile_cpp_opts = '-Wall -pedantic',
-			link_static_opts = 'rcs',
-			link_shared_opts = '-shared -g -fPIC',
-			link_exe_opts = '-g'):
+class External_gcc(External_SimpleCompiler):
+	def __init__(self, ctx, version = None, std = None,
+			compiler = 'gcc', compiler_opts = '-Wall -pedantic',
+			ext_list = ['.c']):
+		self._check_version(version, run_process([compiler, '--version'])[0].splitlines()[0].split()[-1])
+		External_SimpleCompiler.__init__(self, ctx, lang = 'compile_c',
+			compiler = compiler, compiler_opts = compiler_opts, var_prefix = 'CC', ext_list = ext_list)
+		self._set_std(std)
+External.available['gcc'] = External_gcc
 
-		self._check_version(version, run_process([compile_cpp, '--version'])[0].splitlines()[0].split()[-1])
-		External_CPP.__init__(self, ctx, compile_cpp, 'gcc-ar',
-			compile_cpp_opts, link_static_opts, link_shared_opts, link_exe_opts)
+
+class External_gpp(External_SimpleCompiler):
+	def __init__(self, ctx, version = None, std = None,
+			compiler = 'g++', compiler_opts = '-Wall -pedantic',
+			ext_list = ['.cpp', '.cxx', '.cc']):
+		self._check_version(version, run_process([compiler, '--version'])[0].splitlines()[0].split()[-1])
+		External_SimpleCompiler.__init__(self, ctx, lang = 'cpp',
+			compiler = compiler, compiler_opts = compiler_opts,
+			var_prefix = 'CXX', ext_list = ext_list, req_input = {
+				'exe': [External_libstdcpp(ctx)], 'shared': [External_libstdcpp(ctx)],
+				'static': [External_libstdcpp(ctx)]})
 		self._set_std(std)
 
 	def _set_std(self, value):
@@ -423,20 +502,42 @@ class External_GCC(External_CPP):
 				value = 'c++14'
 			else:
 				value = 'c++1z'
-		External_CPP._set_std(self, value)
-External.available['gcc'] = External_GCC
+		External_SimpleCompiler._set_std(self, value)
+External.available['g++'] = External_gpp
 
 
-class External_Clang(External_CPP):
-	def __init__(self, ctx, version = None, std = None, compile_cpp = 'clang++',
-			compile_cpp_opts = '-Weverything',
-			link_static_opts = 'rcs',
-			link_shared_opts = '-shared -g -fPIC',
-			link_exe_opts = '-g'):
+class External_gfortran(External_SimpleCompiler):
+	def __init__(self, ctx, version = None, std = None,
+			compiler = 'gfortran', compiler_opts = '-Wall',
+			ext_list = ['.f']):
+		self._check_version(version, run_process([compiler, '--version'])[0].splitlines()[0].split()[-1])
+		External_SimpleCompiler.__init__(self, ctx, lang = 'fortran',
+			compiler = compiler, compiler_opts = compiler_opts, var_prefix = 'F', ext_list = ext_list)
+		self._set_std(std)
+External.available['gfortran'] = External_gfortran
 
-		self._check_version(version, run_process([compile_cpp, '-v'])[1].splitlines()[0].split()[2])
-		External_CPP.__init__(self, ctx, compile_cpp, 'llvm-ar',
-			compile_cpp_opts, link_static_opts, link_shared_opts, link_exe_opts)
+
+class External_clang(External_SimpleCompiler):
+	def __init__(self, ctx, version = None, std = None,
+			compiler = 'clang', compiler_opts = '-Weverything -Wno-padded',
+			ext_list = ['.c']):
+		self._check_version(version, run_process([compiler, '--version'])[0].splitlines()[0].split()[-1])
+		External_SimpleCompiler.__init__(self, ctx, lang = 'compile_c',
+			compiler = compiler, compiler_opts = compiler_opts, var_prefix = 'CC', ext_list = ext_list)
+		self._set_std(std)
+External.available['clang'] = External_clang
+
+
+class External_clangpp(External_SimpleCompiler):
+	def __init__(self, ctx, version = None, std = None,
+			compiler = 'clang++', compiler_opts = '-Weverything -Wno-padded',
+			ext_list = ['.cpp', '.cxx', '.cc']):
+		self._check_version(version, run_process([compiler, '--version'])[0].splitlines()[0].split()[2])
+		External_SimpleCompiler.__init__(self, ctx, lang = 'cpp',
+			compiler = compiler, compiler_opts = compiler_opts,
+			var_prefix = 'CXX', ext_list = ext_list, req_input = {
+				'exe': [External_libstdcpp(ctx)], 'shared': [External_libstdcpp(ctx)],
+				'static': [External_libstdcpp(ctx)]})
 		self._set_std(std)
 
 	def _set_std(self, value):
@@ -449,27 +550,70 @@ class External_Clang(External_CPP):
 				value = 'c++11'
 			else:
 				value = None
-		External_CPP._set_std(self, value)
-External.available['clang'] = External_Clang
+		External_SimpleCompiler._set_std(self, value)
+External.available['clang++'] = External_clangpp
+
+
+class External_SWIG(External):
+	def __init__(self, ctx, version = None):
+		version_str = ''
+		for version_line in run_process(['swig', '-version'])[0].splitlines():
+			if 'version' in version_line.lower():
+				version_str = version_line.split()[-1]
+				break
+		self._check_version(version, version_str)
+		External.__init__(self, ctx)
+		self._ctx = ctx
+
+	def wrapper(self, lang, name, ifile, libs = None, swig_opts = None, context = None, **kwargs):
+		if context is None:
+			context = self._ctx
+		wrapper_ext = context.find_external(lang)
+		swig_rule = Rule(('swig', 'c++'), 'swig_cpp_%s' % lang,
+			'swig -c++ -%s -I. ${opts} -module ${module_name} -o $out $in' % lang,
+			'swig(C++ -> %s) $out' % lang, {})
+		(src_name, ext) = get_normed_name(name, '.cpp')
+		wrapper_src = BuildTarget(src_name, swig_rule,
+			[InputFile(ifile)] + add_rule_vars(opts = swig_opts, module_name = name),
+			on_use_inputs = {None: [SelfReference()]},
+			on_use_variables = wrapper_ext.on_use_variables)
+		return context.shared_library('_' + name, [wrapper_src, wrapper_ext] + none_to_obj(libs, []), **kwargs)
+External.available['swig'] = External_SWIG
 
 
 class SimpleExternal(External):
 	def __init__(self, ctx, **kwargs):
-		link_opts = kwargs.pop('link', '')
+		link_opts = kwargs.pop('link', [])
+		if not isinstance(link_opts, list):
+			link_opts = [link_opts]
 		if link_opts:
 			kwargs['link_static'] = link_opts
 			kwargs['link_shared'] = link_opts
 			kwargs['link_exe'] = link_opts
-		on_use_flags = {}
+		on_use_variables = {}
 		for rule_name, opts in kwargs.items():
-			on_use_flags.setdefault(rule_name, {})['opts'] = opts
-		External.__init__(self, ctx, on_use_flags = on_use_flags)
+			if not isinstance(opts, list):
+				opts = [opts]
+			on_use_variables.setdefault(rule_name, {})['opts'] = opts
+		External.__init__(self, ctx, on_use_variables = on_use_variables)
 
 
 class External_pthread(SimpleExternal):
 	def __init__(self, ctx):
 		SimpleExternal.__init__(self, ctx, link = '-pthread', compile_cpp = '-pthread')
 External.available['pthread'] = External_pthread
+
+
+class External_libstdcpp(SimpleExternal):
+	def __init__(self, ctx):
+		SimpleExternal.__init__(self, ctx, link_shared = '-lstdc++', link_exe = '-lstdc++')
+External.available['libstdcpp'] = External_libstdcpp
+
+
+class External_libcpp(SimpleExternal):
+	def __init__(self, ctx):
+		SimpleExternal.__init__(self, ctx, link_shared = '-lc++', link_exe = '-lc++')
+External.available['libcpp'] = External_libcpp
 
 
 class External_Python(SimpleExternal):
@@ -526,31 +670,6 @@ def define_non_pkg_config_externals():
 define_non_pkg_config_externals()
 
 
-class External_SWIG(External):
-	def __init__(self, ctx, version = None):
-		version_str = ''
-		for version_line in run_process(['swig', '-version'])[0].splitlines():
-			if 'version' in version_line.lower():
-				version_str = version_line.split()[-1]
-				break
-		self._check_version(version, version_str)
-		External.__init__(self, ctx)
-		self._ctx = ctx
-
-	def wrapper(self, lang, name, ifile, libs = None, swig_opts = None, context = None, **kwargs):
-		if context is None:
-			context = self._ctx
-		wrapper_ext = context.find_external(lang)
-		swig_rule = Rule('swig_cpp_%s' % lang, 'swig -c++ -%s -I. ${opts} -module ${module_name} -o $out $in' % lang, 'swig(C++ -> %s) $out' % lang, {})
-		(src_name, ext) = get_normed_name(name, '.cpp')
-		wrapper_src = BuildTarget(src_name, swig_rule,
-			[InputFile(ifile)] + add_rule_vars(opts = swig_opts, module_name = name),
-			on_use_inputs = {None: [SelfReference()]},
-			on_use_flags = wrapper_ext.on_use_flags)
-		return context.shared_library('_' + name, [wrapper_src, wrapper_ext] + none_to_obj(libs, []), **kwargs)
-External.available['swig'] = External_SWIG
-
-
 def get_normed_name(fn, forced_ext):
 	(root, ext) = os.path.splitext(fn)
 	return (root + forced_ext, ext.lstrip('.'))
@@ -583,18 +702,19 @@ class Registry(object):
 						return target_hash_seen[src_hash]
 					return src
 				target.build_src = list(map(deduplicate_targets, target.build_src))
-		for target in self.target_list:
+		for target in self.target_list: # recurse to find all targets
 			update_target_hash_list(target, target.get_hash())
 
 		# identify targets with the same name but different configuration and
 		# find all used rules (and their parameters)
-		rules_used_flags = {}
+		rules_used_variables = {}
 		target_collisions = {}
 		target_no_rename = set()
-		for target, target_hash in target_hash_list:
+		for idx, (target, target_hash) in enumerate(target_hash_list):
 			target = priority_targets.get(target_hash, target)
-			target_opts = target.get_build_flags().get('opts', '')
-			rules_used_flags.setdefault(target.build_rule.get_hash(), {}).setdefault(target_opts, []).append(target)
+			target_hash_list[idx] = (target, target_hash)
+			target_opts = target.get_build_variables().get('opts', '')
+			rules_used_variables.setdefault(target.build_rule.get_hash(), {}).setdefault(target_opts, []).append(target)
 			target_collisions.setdefault(target.name, []).append(target_hash)
 			if target.no_rename:
 				if target.name in target_no_rename:
@@ -608,7 +728,7 @@ class Registry(object):
 				target.name = root + '_' + target_hash + ext
 
 		# identify rules with a fixed set of parameters to fold them into the rule definition
-		for opts_of_targets in rules_used_flags.values():
+		for opts_of_targets in rules_used_variables.values():
 			if len(opts_of_targets) == 1: # the rule 'rule_name' is always called with the same opts
 				target_opts, targets = list(opts_of_targets.items())[0]
 				if target_opts and (len(targets) > 1): # ignore if the rule is only called once anyway
@@ -639,17 +759,17 @@ class Platform(object):
 	def __init__(self):
 		self.extensions = {'object': '.o', 'shared': '.so', 'static': '.a', 'exe': ''}
 
-	def get_required_flags(self, target_type, compiler_dict):
-		required_flags = {}
+	def get_required_inputs(self, target_type, compiler_dict):
+		result = []
 		for lang, compiler in sorted(compiler_dict.items()):
-			for rule_name, flags in compiler.enforced_flags_by_target_type.get(target_type, {}).items():
-				for opt_name, opts in flags.items():
-					required_flags.setdefault(rule_name, {}).setdefault(opt_name, []).extend(opts)
-		return required_flags
+			result.extend(compiler.required_inputs_by_target_type.get(target_type, []))
+		return result
 
 
 class Context(object):
-	def __init__(self, registry, platform, compiler,
+	targets = []
+
+	def __init__(self, registry, platform, tool, toolchain,
 			implicit_input = None,
 			implicit_object_input = None,
 			implicit_static_library_input = None,
@@ -660,7 +780,7 @@ class Context(object):
 			basedir_static_library = None,
 			basedir_shared_library = None,
 			basedir_executable = None):
-		(self.registry, self.platform, self.compiler) = (registry, platform, compiler)
+		(self.registry, self.platform, self.tool, self.toolchain) = (registry, platform, tool, toolchain)
 		self.basedir = basedir
 		self.basedir_object_file = basedir_object_file
 		self.basedir_static_library = basedir_static_library
@@ -682,27 +802,46 @@ class Context(object):
 	def get_implicit_input(self, implicit_input):
 		return none_to_obj(implicit_input, []) + none_to_obj(self.implicit_input, [])
 
-	def find_external(self, *args, **kwargs):
-		return construct_external(self, *args, **kwargs)
+	def toolchain(ctx, value, *args, **kwargs):
+		value == value.lower()
+		if value not in Toolchain.available:
+			raise Exception('Unknown toolchain %r' % value)
+		return Toolchain.available[value](ctx, *args, **kwargs)
 
-	def find_rule(self, name): # return a new instance
-		for lang, compiler in sorted(self.compiler.items()):
-			for r in compiler.rules:
-				if r.name == name:
-					return Rule(r.name, r.cmd, r.desc, r.defaults, **dict(r.params))
-		raise Exception('build rule %s not found!' % name)
+	def find_external(self, name, *args, **kwargs):
+		name == name.lower()
+		if name not in External.available:
+			if not define_pkg_config_external(name):
+				raise Exception('Unknown external %r' % name)
+		try:
+			return External.available[name](self, *args, **kwargs)
+		except ProcessError:
+			sys.stderr.write('Unable to find external %s\n' % name)
+		except VersionError as e:
+			sys.stderr.write('VersionError(%s): %s\n' % (name, e.args[0]))
 
-	def find_handlers(self, obj):
-		def find_ext_handler(name):
-			result = set()
-			ext = os.path.splitext(name)[1].lower()
-			for lang, compiler in sorted(self.compiler.items()):
-				if ext in compiler.ext_handlers:
-					result.add(compiler.ext_handlers[ext])
-			return result
+	def create_external(self, name, *args, **kwargs):
+		version = kwargs.pop('version', None)
+		external = create_build_helper_external(name, **kwargs)
+		kwargs_external = {}
+		if version and ('version_query' in kwargs):
+			kwargs_external['version'] = version
+		return self.find_external(name, *args, **kwargs_external)
+
+	def find_rule(self, ttfrom, ttto): # return a new instance going from target type (from -> to)
+		for lang, tool in sorted(self.tool.items()):
+			for r in tool.rules:
+				if r.connection == (ttfrom, ttto):
+					return Rule(r.connection, r.name, r.cmd, r.desc, r.defaults, **dict(r.params))
+		raise Exception('build rule translating %s -> %s not found!' % (ttfrom, ttto))
+
+	def find_target_types(self, obj):
 		result = set()
 		if hasattr(obj, 'name'):
-			result.update(find_ext_handler(obj.name))
+			ext = os.path.splitext(obj.name)[1].lower()
+			for lang, tool in sorted(self.tool.items()):
+				if ext in tool.target_types_by_ext:
+					result.add(tool.target_types_by_ext[ext])
 		return result
 
 	def force_build_source(self, input_list):
@@ -712,85 +851,73 @@ class Context(object):
 		def translate_str(value):
 			if isinstance(value, str):
 				return InputFile(value)
-			elif isinstance(value, BuildTarget):
-				return self.registry.register_target(value)
 			return value
 		return list(map(translate_str, input_list))
 
-	def create_target(self, target_name, rule_name, input_list, add_self_to_on_use_inputs, **kwargs):
+	def create_target(self, target_name, rule, input_list, add_self_to_on_use_inputs, **kwargs):
 		on_use_inputs = kwargs.pop('on_use_inputs', {})
 		if add_self_to_on_use_inputs:
 			on_use_inputs.setdefault(None, []).append(SelfReference())
-		target = BuildTarget(target_name, self.find_rule(rule_name), input_list,
-			on_use_inputs = on_use_inputs, **kwargs)
+		target = BuildTarget(target_name, rule, input_list, on_use_inputs = on_use_inputs, **kwargs)
 		return self.registry.register_target(target)
 
 	def object_file(self, obj_name, input_list = None, compiler_opts = None, **kwargs):
 		input_list = self.force_build_source(input_list)
 		# collect rules from the input object extensions
-		input_rules = set()
-		for obj in input_list:
-			input_rules.update(self.find_handlers(obj))
-		if len(input_rules) != 1:
-			raise Exception('Unable to find unique rule (%s) to generate %s' % (repr(input_rules), obj_name))
+		target_types = set()
+		for target_types_new in map(self.find_target_types, input_list):
+			target_types.update(target_types_new)
+		if len(target_types) != 1:
+			raise Exception('Unable to find unique handler (%s) to generate %s' % (repr(target_types), obj_name))
 		obj_name = os.path.join(self.get_basedir(self.basedir_object_file), obj_name)
 		(obj_name, obj_name_ext) = get_normed_name(obj_name, self.platform.extensions['object'])
-		return self.create_target(obj_name, rule_name = input_rules.pop(),
+		return self.create_target(obj_name, rule = self.find_rule(target_types.pop(), 'object'),
 			input_list = self.get_implicit_input(self.implicit_object_input) + input_list + add_rule_vars(opts = compiler_opts),
 			add_self_to_on_use_inputs = True, **kwargs)
 
-	def link(self, output_name, rule_name, input_list, implicit_input_list,
-			add_self_to_on_use_inputs, ensure_flags_by_rule, try_skip_obj = False, **kwargs):
+	def link(self, output_name, target_type, input_list, implicit_input_list,
+			add_self_to_on_use_inputs, link_mode = 'single', **kwargs):
 		input_list = self.force_build_source(input_list)
-		env_list = []
-		rules_found = set()
-		def preprocess_input_list(obj):
-			input_rules = self.find_handlers(obj)
-			if len(input_rules) == 1:
-				rule_name = input_rules.pop()
-				rules_found.add(rule_name)
-				return (rule_name, obj)
-			elif not input_rules:
+		object_input = []
+		link_input = []
+		inputs_by_target_type = {}
+		for obj in input_list:
+			target_types = self.find_target_types(obj)
+			if len(target_types) == 1:
+				inputs_by_target_type.setdefault(target_types.pop(), []).append(obj)
+			elif not target_types: # nothing to compile in any way
 				if not isinstance(obj, BuildTarget):
-					env_list.append(obj)
-				return (None, obj)
+					object_input.append(obj)
+				link_input.append(obj)
 			else:
-				raise Exception('Found multiple rules (%s) to generate object from %s' % (repr(input_rules), repr(obj)))
-		input_list_processed = list(map(preprocess_input_list, input_list))
+				raise Exception('Found multiple rules (%s) to generate object from %s' % (repr(target_types), repr(obj)))
 
-		ensure_flags_processed_targets = set()
-		def do_ensure_flags(t):
-			flags = t.get_build_flags()
-			ensure_flags = ensure_flags_by_rule.get(t.build_rule.name, {})
-			for opt_key, opt_list in sorted(ensure_flags.items()):
-				for opt in opt_list:
-					if opt not in flags.get(opt_key, ''):
-						t.build_src += add_rule_vars(opts = opt)
-			for src in t.build_src:
-				if src not in ensure_flags_processed_targets:
-					ensure_flags_processed_targets.add(src)
-					if isinstance(src, BuildTarget):
-						do_ensure_flags(src)
-			return t
+		input_list_new = list(self.get_implicit_input(implicit_input_list))
+		input_list_new.extend(add_rule_vars(opts = kwargs.pop('linker_opts', None)))
 
 		compiler_opts = kwargs.pop('compiler_opts', None)
-		if try_skip_obj and (len(rules_found) == 1):
-			input_list_new = list(self.implicit_object_input)
-			input_list_new.extend(map(lambda obj_info: obj_info[1], input_list_processed))
-			input_list_new.extend(env_list + add_rule_vars(opts = compiler_opts))
+		if (link_mode == 'direct') and (len(inputs_by_target_type) == 1):
+			(input_target_type, input_list) = inputs_by_target_type.popitem()
+			rule = self.find_rule(input_target_type, target_type)
+			input_list_new.extend(self.get_implicit_input(self.implicit_object_input))
+			input_list_new.extend(input_list + object_input + add_rule_vars(opts = compiler_opts))
 		else:
-			def process_input_list(entry):
-				(obj_rule_name, obj) = entry
-				if obj_rule_name:
-					return self.object_file(obj.name, compiler_opts = compiler_opts,
-						input_list = self.get_implicit_input(self.implicit_object_input) + [obj] + env_list)
-				return obj
-			input_list_new = list(map(process_input_list, input_list_processed))
+			for (input_target_type, input_list) in inputs_by_target_type.items():
+				if link_mode == 'single':
+					for obj in input_list:
+						input_list_new.append(self.object_file(obj.name, compiler_opts = compiler_opts,
+							input_list = self.get_implicit_input(self.implicit_object_input) + [obj] + object_input))
+				else:
+					input_list_new.append(self.object_file(obj.name, compiler_opts = compiler_opts,
+						input_list = self.get_implicit_input(self.implicit_object_input) + input_list + object_input))
+			rule = self.find_rule('object', target_type)
 
-		input_list_new.extend(implicit_input_list)
-		input_list_new.extend(add_rule_vars(opts = kwargs.pop('linker_opts', None)))
-		return do_ensure_flags(self.create_target(output_name, rule_name = rule_name,
-			input_list = input_list_new, add_self_to_on_use_inputs = add_self_to_on_use_inputs, **kwargs))
+		input_list_new.extend(self.platform.get_required_inputs(target_type, self.tool))
+		target = self.create_target(output_name, rule = rule,
+			input_list = input_list_new + link_input,
+			add_self_to_on_use_inputs = add_self_to_on_use_inputs, **kwargs)
+		Context.targets.append(target)
+		return target
 
 	def shared_library(self, lib_name, input_list, **kwargs):
 		lib_name = os.path.join(self.get_basedir(self.basedir_shared_libray), lib_name)
@@ -798,39 +925,37 @@ class Context(object):
 		link_name = lib_name.replace(self.platform.extensions['shared'], '')
 		if lib_name.startswith('lib'):
 			link_name = link_name[3:]
-		on_use_flags = kwargs.pop('on_use_flags', {})
-		on_use_flags.setdefault(None, {}).setdefault('opts', '')
-		on_use_flags[None]['opts'] += ' -L. -l%s' % link_name
+		on_use_variables = kwargs.pop('on_use_variables', {})
+		on_use_variables.setdefault(None, {}).setdefault('opts', [])
+		on_use_variables[None]['opts'] += ['-L.', '-l%s' % link_name]
 		on_use_deps = kwargs.pop('on_use_deps', {})
 		on_use_deps.setdefault(None, []).append(SelfReference())
-		return self.link(lib_name, rule_name = 'link_shared', 
+		return self.link(lib_name, target_type = 'shared', 
 			input_list = input_list, add_self_to_on_use_inputs = False,
-			ensure_flags_by_rule = self.platform.get_required_flags('shared', self.compiler),
 			implicit_input_list = self.get_implicit_input(self.implicit_shared_library_input),
-			on_use_deps = on_use_deps, on_use_flags = on_use_flags, **kwargs)
+			on_use_deps = on_use_deps, on_use_variables = on_use_variables, **kwargs)
 
 	def static_library(self, lib_name, input_list, **kwargs):
 		lib_name = os.path.join(self.get_basedir(self.basedir_static_library), lib_name)
 		(lib_name, ext) = get_normed_name(lib_name, self.platform.extensions['static'])
-		return self.link(lib_name, rule_name = 'link_static',
+		return self.link(lib_name, target_type = 'static',
 			input_list = input_list, add_self_to_on_use_inputs = True,
-			ensure_flags_by_rule = self.platform.get_required_flags('static', self.compiler),
 			implicit_input_list = self.get_implicit_input(self.implicit_static_library_input), **kwargs)
 
 	def executable(self, exe_name, input_list, **kwargs):
 		exe_name = os.path.join(self.get_basedir(self.basedir_executable), exe_name)
 		if not exe_name.endswith(self.platform.extensions['exe']):
 			exe_name += self.platform.extensions['exe']
-		return self.link(exe_name, rule_name = 'link_exe',
+		return self.link(exe_name, target_type = 'exe',
 			input_list = input_list, add_self_to_on_use_inputs = False,
-			ensure_flags_by_rule = self.platform.get_required_flags('exe', self.compiler),
 			implicit_input_list = self.get_implicit_input(self.implicit_executable_input), **kwargs)
 
 
 def create_ctx(ctx, **kwargs):
 	platform = kwargs.pop('platform', ctx.platform)
-	compiler = kwargs.pop('compiler', ctx.compiler)
-	return Context(ctx.registry, platform, compiler, **kwargs)
+	tool = kwargs.pop('tool', dict(ctx.tool))
+	toolchain = kwargs.pop('toolchain', list(ctx.toolchain))
+	return Context(ctx.registry, platform, tool, toolchain, **kwargs)
 
 
 def default_ctx_call(exec_dict, fun, keyword_only = False):
@@ -846,29 +971,59 @@ def create_registered(registry, cls):
 	return create_registered_cls
 
 
-def create_external(ctx, name, *args, **kwargs):
-	version = kwargs.pop('version', None)
-	external = create_build_helper_external(name, **kwargs)
-	kwargs_external = {}
-	if version and ('version_query' in kwargs):
-		kwargs_external['version'] = version
-	return construct_external(ctx, name, *args, **kwargs_external)
+class Toolchain(object):
+	def __init__(self, ctx):
+		self._ctx = ctx
+
+	def _setdefault(self, lang, extcls, *args, **kwargs):
+		cext = self._ctx.tool.get(lang)
+		if isinstance(cext, (type(None), Delayed)):
+			ext = extcls(self._ctx, *args, **kwargs)
+			if ext:
+				self._ctx.tool[lang] = ext
+Toolchain.available = {}
+
+
+class Toolchain_GCC(Toolchain):
+	def __init__(self, ctx, version, c_std = None, c_opts = '', cpp_std = None, cpp_opts = '',
+			fortran_std = None, fortran_opts = '', link_shared_opts = '-shared -fPIC', link_exe_opts = ''):
+		Toolchain.__init__(self, ctx)
+
+		self._setdefault('linker', External_link_gcc, link_shared_opts = link_shared_opts, link_exe_opts = link_exe_opts)
+		self._setdefault('c', External_gcc, std = c_std, compiler_opts = c_opts)
+		self._setdefault('cpp', External_gpp, std = cpp_std, compiler_opts = cpp_opts)
+		self._setdefault('fortran', External_gfortran, std = fortran_std, compiler_opts = fortran_opts)
+
+
+class Toolchain_LLVM(Toolchain):
+	def __init__(self, ctx, version, c_std = None, c_opts = '', cpp_std = None, cpp_opts = '',
+			fortran_std = None, fortran_opts = '', link_shared_opts = '-shared -fPIC', link_exe_opts = ''):
+		Toolchain.__init__(self, ctx)
+
+		self._setdefault('linker', External_link_llvm, link_shared_opts = link_shared_opts, link_exe_opts = link_exe_opts)
+		self._setdefault('c', External_clang, std = c_std, compiler_opts = c_opts)
+		self._setdefault('cpp', External_clangpp, std = cpp_std, compiler_opts = cpp_opts)
+Toolchain.available['llvm'] = Toolchain_LLVM
 
 
 def generate_build_file(bfn, ofn, mode):
 	pyrate_version = Version(__version__)
-	compiler = {}
-	platform = Platform()
 	registry = Registry()
-	ctx = Context(registry, platform, compiler)
-	compiler['C++'] = Delayed(External_GCC, ctx)
+	platform = Platform()
+	tool = {}
+	toolchain = []
+	ctx = Context(registry, platform, tool, toolchain)
+
+	ctx.tool['linker'] = Delayed(External_link_gcc, ctx)
+	ctx.tool['c'] = Delayed(External_gcc, ctx)
+	ctx.tool['cpp'] = Delayed(External_gpp, ctx)
+
 	exec_globals = {}
 	exec_globals.update({
 		'pyrate_version': pyrate_version,
-		'compiler': compiler,
+		'tool': tool,
 		'default_targets': None,
 		'default_context': ctx,
-		'register_target': registry.register_target,
 		'match': match,
 		'version': VersionComparison(),
 		'find_external': default_ctx_call(exec_globals, Context.find_external),
@@ -877,7 +1032,8 @@ def generate_build_file(bfn, ofn, mode):
 		'executable': default_ctx_call(exec_globals, Context.executable),
 		'shared_library': default_ctx_call(exec_globals, Context.shared_library),
 		'static_library': default_ctx_call(exec_globals, Context.static_library),
-		'create_external': default_ctx_call(exec_globals, create_external),
+		'create_external': default_ctx_call(exec_globals, Context.create_external),
+		'toolchain': default_ctx_call(exec_globals, Context.create_external),
 		'BuildSource': BuildSource,
 		'BuildTarget': create_registered(registry, BuildTarget),
 		'BuildTargetFree': BuildTarget,
@@ -905,7 +1061,7 @@ def generate_build_file(bfn, ofn, mode):
 	if default_targets:
 		if not isinstance(default_targets, (tuple, list)):
 			default_targets = [default_targets]
-		writer.set_default(default_targets)
+	writer.set_default(default_targets, Context.targets)
 
 def main():
 	def parse_arguments():

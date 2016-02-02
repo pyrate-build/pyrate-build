@@ -6,8 +6,8 @@ rule compile_cpp
   depfile = $out.d
   deps = gcc
 
-LINKER_EXE = g++
-LINKER_EXE_FLAGS = -g
+LINKER_EXE = gcc
+LINKER_EXE_FLAGS = 
 rule link_exe
   command = $LINKER_EXE $LINKER_EXE_FLAGS ${opts} -o $out $in
   description = link(exe) $out
@@ -15,3 +15,5 @@ rule link_exe
 build test.o: compile_cpp test.cpp
 build foo.o: compile_cpp foo.cpp
 build example01.bin: link_exe test.o foo.o
+  opts = -lstdc++
+build all: phony example01.bin

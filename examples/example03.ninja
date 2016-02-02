@@ -6,29 +6,18 @@ rule compile_cpp
   depfile = $out.d
   deps = gcc
 
-LINKER_EXE = g++
-LINKER_EXE_FLAGS = -g
-rule link_exe
-  command = $LINKER_EXE $LINKER_EXE_FLAGS ${opts} -o $out $in
+LINKER_EXE = gcc
+LINKER_EXE_FLAGS = 
+rule link_exe_786d8208a03cca3310ca96b2ebf2ff59
+  command = $LINKER_EXE $LINKER_EXE_FLAGS -lstdc++ -o $out $in
   description = link(exe) $out
 
-LINKER_SHARED = g++
-LINKER_SHARED_FLAGS = -shared -g -fPIC
-rule link_shared
-  command = $LINKER_SHARED $LINKER_SHARED_FLAGS ${opts} -o $out $in
-  description = link(shared) $out
-
-build foo.o: compile_cpp foo.cpp
-  opts = -O3 -fPIC
-build libExample03a.so: link_shared foo.o
 build test_1cfedb0e86f69ad43c2ba451c73bb586.o: compile_cpp test.cpp
-build example03a.bin: link_exe test_1cfedb0e86f69ad43c2ba451c73bb586.o | libExample03a.so
-  opts = -L. -lExample03a
-build libExample03b.so: link_shared foo.o
-build example03b.bin: link_exe test_1cfedb0e86f69ad43c2ba451c73bb586.o | libExample03b.so
-  opts = -L. -lExample03b
-build test_ddc519d468dd216db1ca93f9f80094a0.o: compile_cpp test.cpp
-  opts = -O0
-build example03c.bin: link_exe test_ddc519d468dd216db1ca93f9f80094a0.o | libExample03b.so
-  opts = -L. -lExample03b
-default example03c.bin
+build foo_a30d37c95b97852fd6dc8f4a1cf0a8e1.o: compile_cpp foo.cpp
+build example03_debug.bin: link_exe_786d8208a03cca3310ca96b2ebf2ff59 test_1cfedb0e86f69ad43c2ba451c73bb586.o foo_a30d37c95b97852fd6dc8f4a1cf0a8e1.o
+build test_ea06e0f15a7fb50d00928f0d8923fdef.o: compile_cpp test.cpp
+  opts = -O3
+build foo_b323f8bc970eb8ff180102d50bd99af1.o: compile_cpp foo.cpp
+  opts = -O3
+build example03_release.bin: link_exe_786d8208a03cca3310ca96b2ebf2ff59 test_ea06e0f15a7fb50d00928f0d8923fdef.o foo_b323f8bc970eb8ff180102d50bd99af1.o
+build all: phony example03_debug.bin example03_release.bin

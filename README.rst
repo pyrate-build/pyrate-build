@@ -104,7 +104,7 @@ In general, a build input list that can be used to construct a build target take
 
 Each item can be one of the following:
 
--  a *string* is interpreted as a file name that is processed according to the rules specified by the packages in the ``compiler`` dictionary
+-  a *string* is interpreted as a file name that is processed according to the rules specified by the packages in the ``tool`` dictionary
 -  a *build target* as returned by the functions described in `Defining build targets`_ or explicitly defined
 -  an *external dependency* as returned by the functions described in `External dependencies`_ or explicitly defined
 -  or any other kind of ``BuildSource`` (explained later)
@@ -167,10 +167,10 @@ A common argument for this function is a version selector, that is supplied thro
 
 -  ``version``
 
-The comparison between this variable (eg. ``version >= 4.1``) and a version specifier
+The comparison between this variable and a version specifier (eg. ``version >= 4.1``)
 will return a function that can be used to check the expression and is used by the external package finder.
 A version specifier can be a string (``'0.1.2'``) or tuple (``(0, 1, 2)``) with an arbitrary number
-of subversion separators, or a floating point number (``1.2``).
+of delimeters, or a floating point number (``1.2``).
 This allows for example to write ``find_external('clang', version >= 3.5)`` to discover a clang installation with version 3.5 or later.
 
 Since ``find_external`` also integrates with ``pkg-config``, a large number of external packages is
@@ -199,15 +199,27 @@ However there are four parameters that have a special meaning:
 -  ``link = opts`` is equivalent to specifying ``link_shared = opts``, ``link_static = opts`` and
    ``link_exe = opts``
 
-The following example recreates the builtin external package for wxWidgets:
+The following example recreates the builtin external package for wxWidgets and returns a representation
+of the external package if a matching version is found:
 
 .. code:: python
 
     my_wxwidgets = create_external('wxwidgets', build_helper = 'wx-config',
-        version_query = '--version', link = '--libs', compile_cpp = '--cxxflags')
+        version_query = '--version', link = '--libs', compile_cpp = '--cxxflags',
+        version = version >= 2.8)
 
 Configuration of the build environment
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+It is possible to query the current version of **pyrate** via the variable:
+
+-  ``pyrate_version``
+
+this allows to ensure a compatible version of **pyrate** with something along the lines of:
+
+.. code:: python
+
+    assert(pyrate_version > '0.1.8')
 
 A build context allows for example to define implicit dependencies that are automatically
 included in all generated object files, executables or libraries (via ``implicit_input_*`` options).
@@ -233,23 +245,15 @@ These parameters can also be changed on an existing context instance:
 
     default_context.basedir = 'build'
 
-Finally, the used default compilers can be configured via the global variable
+A context also allows to access the some additional settings - which are described in
+more detail below. These settings are available as member functions of a context or
+as global variables (that are provided by the default_context):
 
--  ``compiler``
+-  ``tool``
+   This is a dictionary that contains links to external packages that provide the basic rules
+   and parameters that are used to process sources and generate targets.
+   This dictionary can be modified, but should not be overwritten.
 
-This is a dictionary that contains links to external packages that provide the basic rules
-and parameters that are used to build the source. This dictionary can be modified, but should
-not be overwritten.
-
-It is possible to query the current version of **pyrate** via the variable:
-
--  ``pyrate_version``
-
-this allows to ensure a compatible version of **pyrate** with something along the lines of:
-
-.. code:: python
-
-    assert(pyrate_version > '0.1.8')
 
 Target Collision Avoidance
 ~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -278,33 +282,59 @@ settings used during the compilation of ``test.cpp``.
 During the linking step, these object files will generate **three** binaries named
 ``example.bin``, ``example_<hash4>.bin``, ``example_<hash5>.bin``.
 Where ``example.bin`` was compiled with the compiler option '-O2'. To identify which
-target belong to which hash, the ``<target_obj>.get_hash()`` function can be used.
+target belongs to which hash, the ``<target_obj>.get_hash()`` function can be used.
 
 However it is **strongly** recommended to always ensure collision free names for executables
 and shared / static libraries.
+
+BuildSource
+~~~~~~~~~~~
+
+The build source is the fundamental building block of pyrate. It is modeled by a class ``BuildSource``,
+which can be constructed with the following code:
+
+.. code:: python
+
+    BuildSource(on_use_inputs = None, on_use_deps = None, on_use_variables = None)
+
+The three arguments ``on_use_inputs``, ``on_use_deps`` and ``on_use_variables`` specify how a rule belonging
+to a build target should react to having the BuildSource as input. Each argument can be a dictionary, where
+the key specifies the rule (a rule name string or ``None`` to match any rule) and the value specifies for
+
+- ``on_use_inputs`` a list of objects with ``name`` attribute that is given as input arguments for the target
+- ``on_use_deps`` a list of objects with ``name`` attribute that is specified as dependency of the target
+- ``on_use_variables`` a dictionary with variables for the target. Probably the most important variable
+  is ``opts``, which is used to supply options to rules
+
+Examples for different build sources are:
+
+- any string that is given as build input is converted into an ``InputFile` - a ``BuildSource`` that
+  forwards the specified file name to any rules (using ``on_use_inputs``)
+- ``Externals`` - are a type of ``BuildSource`` that specify ``on_use_variables`` among other things
+
 
 Externals
 ---------
 
 Currently the following builtin externals are supported (listed with all possible ``find_external`` arguments):
 
-- ``gcc``
+- ``gcc`` - GNU C compiler
+- ``clang`` - LLVM C compiler
 
   * ``version`` - specifies required version (eg. ``version >= 5.2``)
-  * ``std`` - C/C++ language standard version (eg. ``'gnu++14'`` or ``'latest'``).
-    A property with the same name allows to also set this value on an existing external (eg. ``compiler['C++'].std = 'latest'``).
-  * ``compile_cpp`` - name of the executable
-  * ``compile_cpp_opts`` - options that are used during the compilation stage
-  * ``link_static_opts``, ``link_shared_opts``, ``link_exe_opts`` - options that are used during the linking stage
+  * ``std`` - C language standard version (eg. ``'gnu99'``).
+    A property with the same name allows to also set this value on an existing external (eg. ``tool['c'].std = 'c90'``).
+  * ``compiler`` - name of the executable
+  * ``compiler_opts`` - options that are used during the compilation stage
 
-- ``clang``
+- ``gpp`` - GNU C++ compiler
+- ``clang++`` - LLVM C++ compiler
 
-  * ``version`` - specifies required version (eg. ``version > 3.5``)
-  * ``std`` - C/C++ language standard version (eg. ``'c++1y'`` or ``'latest'``).
-    A property with the same name allows to also set this value on an existing external (eg. ``compiler['C++'].std = 'latest'``).
-  * ``compile_cpp`` - name of the executable
-  * ``compile_cpp_opts`` - options that are used during the compilation stage
-  * ``link_static_opts``, ``link_shared_opts``, ``link_exe_opts`` - options that are used during the linking stage
+  * ``version`` - specifies required version (eg. ``version >= 3.7``)
+  * ``std`` - C++ language standard version (eg. ``'c++14'`` or ``'latest'``).
+    A property with the same name allows to also set this value on an existing external (eg. ``tool['cpp'].std = 'latest'``).
+  * ``compiler`` - name of the executable
+  * ``compiler_opts`` - options that are used during the compilation stage
 
 - ``swig`` - The swig package also provides the member function ``wrapper`` to describe the generation of automated interface code
 
@@ -313,7 +343,20 @@ Currently the following builtin externals are supported (listed with all possibl
     ``context`` allows to specify a different build context, additional keyword parameters are forwarded to the shared_library
     invokation that creates the wrapper library
 
+- ``link-base`` - basic linker tools (using ``ld`` and ``ar``)
+- ``link-gcc`` - calling linker via gcc (using ``gcc`` and ``gcc-ar``)
+- ``link-llvm`` - calling linker via llvm (using ``clang`` and ``llvm-ar``)
+
+  * ``link_static`` - path to the static linker
+  * ``link_static_opts`` = options for the static linker
+  * ``link_shared`` - path to the shared linker
+  * ``link_shared_opts`` = options for the shared linker
+  * ``link_exe`` - path to the executable linker
+  * ``link_exe_opts`` = options for the executable linker
+
 - ``pthread`` - posix thread library
+- ``stdlibcpp`` - GNU C++ library
+- ``libcpp`` - LLVM C++ library
 
 The following list contains all builtin externals with a single ``find_external`` parameter ``version``,
 that specifies the required version (eg. ``version >= 2.6``):
@@ -352,9 +395,9 @@ A more complicated example is presented in the following code fragment. It demon
 
 .. code:: python
 
-    clang = find_external('clang', version >= 3.7, std = 'c++11')
+    clang = find_external('clang++', version >= 3.7, std = 'c++11')
     if clang:
-        compiler['C++'] = clang
+        tool['cpp'] = clang
 
     lib_files = match("*.cpp -test* -mylib.cpp")
     static_library('libFoo', lib_files, compiler_opts = '-O3')
@@ -369,6 +412,17 @@ A more complicated example is presented in the following code fragment. It demon
         executable(fn.replace('.cpp', '.exe'), [fn, lib_reference])
 
 Many more examples with an increasing level of complexity are available in the `github`_ repository.
+
+Changelog
+---------
+
+- **0.2.0** changes
+
+  * renamed external packages: ``clang`` to ``clang++``, ``gcc`` to ``gpp``
+  * added external packages: ``clang``, ``gcc``, ``libstdcpp``, ``libcpp``, ``gfortran``,
+    ``link-base``, ``link-gcc``, ``link-llvm``
+  * renamed ``compiler`` variable to ``tool``, changed to lower case slot names, using ``cpp`` instead of ``C++``
+
 
 .. _ninja(s): https://github.com/ninja-build/ninja
 

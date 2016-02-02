@@ -1,0 +1,10 @@
+CXX = g++
+CXX_FLAGS = -Wall -pedantic
+rule compile_link_exe_cpp
+  command = $CXX $CXX_FLAGS ${opts} -MMD -MT $out -MF $out.d $in -o $out
+  description = compile+link(cpp) $out
+  depfile = $out.d
+  deps = gcc
+
+build example10.bin: compile_link_exe_cpp test.cpp foo.cpp
+build all: phony example10.bin
