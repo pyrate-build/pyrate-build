@@ -93,8 +93,6 @@ class Version(object):
 
 
 class VersionComparison(object):
-	def __init__(self):
-		pass
 	def __lt__(self, other):
 		return Version(other).__gt__
 	def __le__(self, other):
@@ -107,6 +105,7 @@ class VersionComparison(object):
 		return Version(other).__lt__
 	def __ge__(self, other):
 		return Version(other).__le__
+ver = VersionComparison()
 
 
 def match(value, dn = '.'):
@@ -458,6 +457,12 @@ class External_SimpleCompiler(External): # C family compiler
 			required_inputs_by_target_type = required_inputs_by_target_type)
 		self._set_std(std)
 
+	def _find_latest(self, vcmp_list, default = None):
+		for (vcmp, result) in vcmp_list:
+			if vcmp(self.version):
+				return result
+		return default
+
 	def get_latest(self):
 		raise Exception('Unable to find latest language standard!')
 
@@ -496,15 +501,12 @@ class External_gpp(External_SimpleCompiler):
 				'static': [External_libstdcpp(ctx)]})
 
 	def get_latest(self):
-		if self.version < '4.3':
-			return 'c++03'
-		elif self.version < '4.7':
-			return 'c++0x'
-		elif self.version < '4.8':
-			return 'c++11'
-		elif self.version < '5.0':
-			return 'c++14'
-		return 'c++1z'
+		return self._find_latest([
+			(ver < '4.3', 'c++03'),
+			(ver < '4.7', 'c++0x'),
+			(ver < '4.8', 'c++11'),
+			(ver < '5.0', 'c++14')],
+			'c++1z')
 External.available['g++'] = External_gpp
 External.available['gpp'] = External_gpp
 
@@ -544,12 +546,10 @@ class External_clangpp(External_SimpleCompiler):
 				'static': [External_libstdcpp(ctx)]})
 
 	def get_latest(self):
-		if self.version >= '3.5':
-			return 'c++1z'
-		elif self.version >= '3.4':
-			return 'c++14'
-		elif self.version >= '3.3':
-			return 'c++11'
+		return self._find_latest([
+			(ver >= '3.5', 'c++1z'),
+			(ver < '3.4', 'c++14'),
+			(ver < '3.3', 'c++11')])
 External.available['clang++'] = External_clangpp
 External.available['clangpp'] = External_clangpp
 
@@ -1082,7 +1082,7 @@ def generate_build_file(bfn, ofn, mode):
 		'pyrate_version': pyrate_version,
 		'tools': tools,
 		'toolchain': tools.toolchain,
-		'version': VersionComparison(),
+		'version': ver,
 		# stable API
 		'create_external': default_ctx_call(exec_globals, Context.create_external),
 		'executable': default_ctx_call(exec_globals, Context.executable),

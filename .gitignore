@@ -1,9 +1,11 @@
 *.a
 *.bin
 build
+build.py
 dist
 *.egg-info
 examples/examples
+Makefile
 mylib*
 .ninja_*
 *.ninja
