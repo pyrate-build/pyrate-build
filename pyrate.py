@@ -496,13 +496,13 @@ class External_gpp(External_SimpleCompiler):
 				'static': [External_libstdcpp(ctx)]})
 
 	def get_latest(self):
-		if self.version < 4.3:
+		if self.version < '4.3':
 			return 'c++03'
-		elif self.version < 4.7:
+		elif self.version < '4.7':
 			return 'c++0x'
-		elif self.version < 4.8:
+		elif self.version < '4.8':
 			return 'c++11'
-		elif self.version < 5.0:
+		elif self.version < '5.0':
 			return 'c++14'
 		return 'c++1z'
 External.available['g++'] = External_gpp
@@ -544,11 +544,11 @@ class External_clangpp(External_SimpleCompiler):
 				'static': [External_libstdcpp(ctx)]})
 
 	def get_latest(self):
-		if self.version >= 3.5:
+		if self.version >= '3.5':
 			return 'c++1z'
-		elif self.version >= 3.4:
+		elif self.version >= '3.4':
 			return 'c++14'
-		elif self.version >= 3.3:
+		elif self.version >= '3.3':
 			return 'c++11'
 External.available['clang++'] = External_clangpp
 External.available['clangpp'] = External_clangpp
@@ -935,9 +935,6 @@ class Context(object):
 					for obj in input_list:
 						input_list_new.append(self.object_file(obj.name, compiler_opts = compiler_opts,
 							input_list = self.get_implicit_input(self.implicit_object_input) + [obj] + object_input))
-				else:
-					input_list_new.append(self.object_file(obj.name, compiler_opts = compiler_opts,
-						input_list = self.get_implicit_input(self.implicit_object_input) + input_list + object_input))
 			rule = self.find_rule('object', target_type)
 
 		target = self.create_target(output_name, rule = rule,

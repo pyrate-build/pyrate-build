@@ -33,7 +33,7 @@ run_test_make() {
 }
 
 $EXEC --version
-TESTS="example01.py example02.py example03.py example04.py example05.py"
+TESTS="../examples/example01.py example01.py example02.py example03.py example04.py example05.py"
 TESTS="$TESTS example06.py example07.py example08.py example09.py example10.py"
 for EXAMPLE in $TESTS; do
 	run_test $EXAMPLE
