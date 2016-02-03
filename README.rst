@@ -159,9 +159,12 @@ The build environment / dependencies on external packages can be expressed using
 following functions / variables:
 
 -  ``find_external(name, ...)``
+-  ``use_external(name, ...)``
 
 The function ``find_external`` searches for some external dependency (built-in, pkg-config package
 or self-defined) with the given name and returns either None or a representation of the dependency.
+``use_external`` will first call ``find_external`` and add the external to the implicit input list
+of the context if it exists.
 The function takes additional positional and keyword arguments that depend on the external package.
 A common argument for this function is a version selector, that is supplied through a global variable:
 
@@ -249,11 +252,29 @@ A context also allows to access the some additional settings - which are describ
 more detail below. These settings are available as member functions of a context or
 as global variables (that are provided by the default_context):
 
--  ``tool``
+-  ``tools``
    This is a dictionary that contains links to external packages that provide the basic rules
    and parameters that are used to process sources and generate targets.
    This dictionary can be modified, but should not be overwritten.
 
+-  ``toolchain``
+   This is a list of ``Toolchain`` instances that is used to populate the tools dictionary
+   in reverse order. There are currently two toolchains available: ``gcc`` and ``llvm``
+   They can be accessed with the follwing two methods:
+
+-  ``find_toolchain(name, ...)``
+-  ``use_toolchain(name, ...)``
+   These methods work in the same way as the ``find_external`` and ``use_external`` methods.
+   The available toolchains and their options are presented in `Toolchains`_.
+   The following example would try to set the clang / clang++ compiler and llvm linker in the tool dictionary
+
+.. code:: python
+
+    use_toolchain('llvm', version >= 3.7, cpp_std = 'c++11', cpp_opts = '-Wall')
+    # is the same as
+    llvm = find_toolchain('llvm', version >= 3.7, cpp_std = 'c++11', cpp_opts = '-Wall')
+    if llvm:
+        toolchain.append(llvm)
 
 Target Collision Avoidance
 ~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -312,7 +333,6 @@ Examples for different build sources are:
   forwards the specified file name to any rules (using ``on_use_inputs``)
 - ``Externals`` - are a type of ``BuildSource`` that specify ``on_use_variables`` among other things
 
-
 Externals
 ---------
 
@@ -327,8 +347,8 @@ Currently the following builtin externals are supported (listed with all possibl
   * ``compiler`` - name of the executable
   * ``compiler_opts`` - options that are used during the compilation stage
 
-- ``gpp`` - GNU C++ compiler
-- ``clang++`` - LLVM C++ compiler
+- ``g++``, ``gpp`` - GNU C++ compiler
+- ``clang++``, ``clangpp`` - LLVM C++ compiler
 
   * ``version`` - specifies required version (eg. ``version >= 3.7``)
   * ``std`` - C++ language standard version (eg. ``'c++14'`` or ``'latest'``).
@@ -348,11 +368,11 @@ Currently the following builtin externals are supported (listed with all possibl
 - ``link-llvm`` - calling linker via llvm (using ``clang`` and ``llvm-ar``)
 
   * ``link_static`` - path to the static linker
-  * ``link_static_opts`` = options for the static linker
+  * ``link_static_opts`` - options for the static linker
   * ``link_shared`` - path to the shared linker
-  * ``link_shared_opts`` = options for the shared linker
+  * ``link_shared_opts`` - options for the shared linker
   * ``link_exe`` - path to the executable linker
-  * ``link_exe_opts`` = options for the executable linker
+  * ``link_exe_opts`` - options for the executable linker
 
 - ``pthread`` - posix thread library
 - ``stdlibcpp`` - GNU C++ library
@@ -376,6 +396,26 @@ of available packages on a system can be queried with:
 
 All packages listed in that overview can be accessed with the ``find_external`` function.
 
+Toolchains
+----------
+
+The following toolchains are currently available:
+
+-  ``gcc`` - the GNU compiler collection
+
+  * ``version`` - requested version
+  * ``c_std``, ``c_opts`` - control the std and flags of the ``gcc`` external
+  * ``cpp_std``, ``cpp_opts`` - control the std and flags of the ``gpp`` external
+  * ``fortran_std``, ``fortran_opts`` - control the std and flags of the ``gfortran`` external
+  * ``link_shared_opt``, ``link_exe_opt`` - control the linker settings
+
+-  ``llvm`` - the LLVM Compiler Infrastructure
+
+  * ``version`` - requested version
+  * ``c_std``, ``c_opts`` - control the std and flags of the ``clang`` external
+  * ``cpp_std``, ``cpp_opts`` - control the std and flags of the ``clang++`` external
+  * ``link_shared_opt``, ``link_exe_opt`` - control the linker settings
+
 Example
 -------
 
@@ -388,28 +428,27 @@ producing a single executable looks like this:
 
 A more complicated example is presented in the following code fragment. It demonstrates how to
 
-- change the default compiler to clang,
+- change the default compiler toolchain to llvm (clang / clang++),
 - define a native static and dynamic library from a set of files selected by wildcards,
 - generate several executables accessing to the shared library and
 - generate a wrapper library to access the C++ library from python (if swig is available).
 
 .. code:: python
 
-    clang = find_external('clang++', version >= 3.7, std = 'c++11')
-    if clang:
-        tool['cpp'] = clang
+    use_toolchain('llvm', version >= 3.7, cpp_std = 'c++11', cpp_opts = '-Wall')
 
-    lib_files = match("*.cpp -test* -mylib.cpp")
+    lib_files = match('*.cpp -test* -mylib.* -py_foo.cpp')
     static_library('libFoo', lib_files, compiler_opts = '-O3')
     lib_reference = shared_library('libFoo', lib_files)
 
     python = find_external('python', version > 2)
-    swig = find_external('swig')
-    if swig and python:
-        swig.wrapper('python', 'mylib', 'mylib.i', libs = [lib_reference])
+    swig = find_external('swig', version >= 2)
 
-    for fn in match("test*.cpp"):
-        executable(fn.replace('.cpp', '.exe'), [fn, lib_reference])
+    if swig and python:
+        swig.wrapper('python', 'mylib', 'foo.i', libs = [lib_reference])
+
+    for fn in match('test*.cpp'):
+        executable(fn.replace('.cpp', '.bin'), [fn, lib_reference, find_external('pthread')])
 
 Many more examples with an increasing level of complexity are available in the `github`_ repository.
 
@@ -421,8 +460,8 @@ Changelog
   * renamed external packages: ``clang`` to ``clang++``, ``gcc`` to ``gpp``
   * added external packages: ``clang``, ``gcc``, ``libstdcpp``, ``libcpp``, ``gfortran``,
     ``link-base``, ``link-gcc``, ``link-llvm``
-  * renamed ``compiler`` variable to ``tool``, changed to lower case slot names, using ``cpp`` instead of ``C++``
-
+  * renamed ``compiler`` variable to ``tools``, changed to lower case slot names, using ``cpp`` instead of ``C++``
+  * added ``toolchain`` and ``find_toolchain`` to set multiple tools at once
 
 .. _ninja(s): https://github.com/ninja-build/ninja
 

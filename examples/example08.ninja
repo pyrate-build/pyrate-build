@@ -1,29 +1,29 @@
 CXX = g++
-CXX_FLAGS = -std=c++11 -Wall -pedantic
+CXX_FLAGS_19eaa57475b960250ca45a6cee4d1e1f = -std=c++11 -Wall -pedantic
 rule compile_cpp_50e231c45ccad62d877c42a85982d16f
-  command = $CXX $CXX_FLAGS -pthread -O3 -MMD -MT $out -MF $out.d -c $in -o $out
+  command = $CXX $CXX_FLAGS_19eaa57475b960250ca45a6cee4d1e1f -pthread -O3 -MMD -MT $out -MF $out.d -c $in -o $out
   description = compile(cpp) $out
   depfile = $out.d
   deps = gcc
 
-CXX = g++
-CXX_FLAGS = -std=c++03 -Wall -pedantic
-rule compile_cpp_7b166a85cb715d5e9024bfbca36f082d
-  command = $CXX $CXX_FLAGS -pthread -O3 -MMD -MT $out -MF $out.d -c $in -o $out
+CXX_FLAGS_2bfe918f44239d24904dfa190c61ba0a = -std=c++14 -Wall -pedantic
+rule compile_cpp_62b39bb2527f26fbc0fcc31450e4930f
+  command = $CXX $CXX_FLAGS_2bfe918f44239d24904dfa190c61ba0a -pthread -O3 -MMD -MT $out -MF $out.d -c $in -o $out
   description = compile(cpp) $out
   depfile = $out.d
   deps = gcc
 
-LINKER_EXE = g++
-LINKER_EXE_FLAGS = -g
-rule link_exe_f01a3d1944853a0d27588672ee427329
-  command = $LINKER_EXE $LINKER_EXE_FLAGS -pthread -o $out $in
+LINKER_EXE = gcc
+LINKER_EXE_FLAGS = 
+rule link_exe_89d4f8ff24f8400c7b70e7de49e926e8
+  command = $LINKER_EXE $LINKER_EXE_FLAGS -pthread -lstdc++ -o $out $in
   description = link(exe) $out
 
 build test_cpp11_8049cca6e9b67ab3c8824295a79162fa.o: compile_cpp_50e231c45ccad62d877c42a85982d16f test_cpp11.cpp
 build foo_8c8311fc35c09c3ea664b109dd768024.o: compile_cpp_50e231c45ccad62d877c42a85982d16f foo.cpp
-build example08_default_ctx.bin: link_exe_f01a3d1944853a0d27588672ee427329 test_cpp11_8049cca6e9b67ab3c8824295a79162fa.o foo_8c8311fc35c09c3ea664b109dd768024.o
-build test_cpp11_2020b366674fc10da964a97bb3245cd0.o: compile_cpp_7b166a85cb715d5e9024bfbca36f082d test_cpp11.cpp
-build foo_df37e009922692dc0209aeae62f273fc.o: compile_cpp_7b166a85cb715d5e9024bfbca36f082d foo.cpp
-build example08_own_ctx.bin: link_exe_f01a3d1944853a0d27588672ee427329 test_cpp11_2020b366674fc10da964a97bb3245cd0.o foo_df37e009922692dc0209aeae62f273fc.o
+build example08_default_ctx.bin: link_exe_89d4f8ff24f8400c7b70e7de49e926e8 test_cpp11_8049cca6e9b67ab3c8824295a79162fa.o foo_8c8311fc35c09c3ea664b109dd768024.o
+build test_cpp11_1d002361fa8387e18c84ea2191d0f602.o: compile_cpp_62b39bb2527f26fbc0fcc31450e4930f test_cpp11.cpp
+build foo_f31b71ffa33286ccd865061c7accbf8d.o: compile_cpp_62b39bb2527f26fbc0fcc31450e4930f foo.cpp
+build example08_own_ctx.bin: link_exe_89d4f8ff24f8400c7b70e7de49e926e8 test_cpp11_1d002361fa8387e18c84ea2191d0f602.o foo_f31b71ffa33286ccd865061c7accbf8d.o
+build all: phony example08_default_ctx.bin example08_own_ctx.bin
 default example08_default_ctx.bin

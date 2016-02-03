@@ -131,18 +131,18 @@ class Delayed(object):
 	def __init__(self, cls, *args, **kwargs):
 		(self._cls, self._args, self._kwargs) = (cls, args, kwargs)
 		self._delayed_instance = None
-	def _get_instance(self):
+	def get_instance(self):
 		if not self._delayed_instance:
 			self._delayed_instance = self._cls(*self._args, **self._kwargs)
 		return self._delayed_instance
 	def __setattr__(self, name, value):
 		if name in ['_cls', '_args', '_kwargs', '_delayed_instance']:
 			return object.__setattr__(self, name, value)
-		return self._get_instance().__setattr__(name, value)
+		return self.get_instance().__setattr__(name, value)
 	def __getattribute__(self, name):
-		if name in ['_cls', '_args', '_kwargs', '_delayed_instance', '_get_instance']:
+		if name in ['_cls', '_args', '_kwargs', '_delayed_instance', 'get_instance']:
 			return object.__getattribute__(self, name)
-		return self._get_instance().__getattribute__(name)
+		return self.get_instance().__getattribute__(name)
 	def __repr__(self):
 		if self._delayed_instance:
 			return 'Delayed(%s)' % repr(self._delayed_instance)
@@ -318,10 +318,14 @@ class BuildTarget(BuildSource):
 		result = self._get_build(lambda e: e.on_use_variables, dict, combine_variables)
 		if self._drop_opt:
 			result.pop('opts', None)
-		for key in list(result):
-			tmp = str.join(' ', result.pop(key))
+		for key in sorted(result):
+			values = result.pop(key)
+			tmp = ''
+			for value in values:
+				if value not in tmp:
+					tmp += ' ' + value
 			if tmp:
-				result[key] = tmp
+				result[key] = tmp.strip()
 		return result
 
 
@@ -343,7 +347,10 @@ def add_rule_vars(**kwargs):
 	variables = {}
 	for key, value in kwargs.items():
 		if value:
-			variables.setdefault(key, []).append(value)
+			if isinstance(value, list):
+				variables.setdefault(key, []).extend(value)
+			else:
+				variables.setdefault(key, []).append(value)
 	if variables:
 		return [RuleVariables(on_use_variables = {None: variables})]
 	return []
@@ -396,9 +403,15 @@ class External_linker(External):
 
 
 class External_link_base(External_linker):
-	def __init__(self, ctx, link_static = 'ar', link_static_opts = 'rcs',
-			link_shared = 'ld', link_shared_opts = '-shared -fPIC',
-			link_exe = 'ld', link_exe_opts = ''):
+	def __init__(self, ctx, link_static = None, link_static_opts = None,
+			link_shared = None, link_shared_opts = None,
+			link_exe = None, link_exe_opts = None):
+		link_static = none_to_obj(link_static, 'ar')
+		link_static_opts = none_to_obj(link_static_opts, 'rcs')
+		link_shared = none_to_obj(link_shared, 'ld')
+		link_shared_opts = none_to_obj(link_shared_opts, '-shared -fPIC')
+		link_exe = none_to_obj(link_exe, 'ld')
+		link_exe_opts = none_to_obj(link_exe_opts, '')
 		External_linker.__init__(self, ctx,
 			link_static = link_static, link_static_opts = link_static_opts,
 			link_shared = link_shared, link_shared_opts = link_shared_opts,
@@ -407,9 +420,15 @@ External.available['link-base'] = External_link_base
 
 
 class External_link_gcc(External_linker):
-	def __init__(self, ctx, link_static = 'gcc-ar', link_static_opts = 'rcs',
-			link_shared = 'gcc', link_shared_opts = '-shared -fPIC',
-			link_exe = 'gcc', link_exe_opts = ''):
+	def __init__(self, ctx, link_static = None, link_static_opts = None,
+			link_shared = None, link_shared_opts = None,
+			link_exe = None, link_exe_opts = None):
+		link_static = none_to_obj(link_static, 'gcc-ar')
+		link_static_opts = none_to_obj(link_static_opts, 'rcs')
+		link_shared = none_to_obj(link_shared, 'gcc')
+		link_shared_opts = none_to_obj(link_shared_opts, '-shared -fPIC')
+		link_exe = none_to_obj(link_exe, 'gcc')
+		link_exe_opts = none_to_obj(link_exe_opts, '')
 		External_linker.__init__(self, ctx,
 			link_static = link_static, link_static_opts = link_static_opts,
 			link_shared = link_shared, link_shared_opts = link_shared_opts,
@@ -418,9 +437,15 @@ External.available['link-gcc'] = External_link_gcc
 
 
 class External_link_llvm(External_linker):
-	def __init__(self, ctx, link_static = 'llvm-ar', link_static_opts = 'rcs',
-			link_shared = 'clang', link_shared_opts = '-shared -fPIC',
-			link_exe = 'clang', link_exe_opts = ''):
+	def __init__(self, ctx, link_static = None, link_static_opts = None,
+			link_shared = None, link_shared_opts = None,
+			link_exe = None, link_exe_opts = None):
+		link_static = none_to_obj(link_static, 'llvm-ar')
+		link_static_opts = none_to_obj(link_static_opts, 'rcs')
+		link_shared = none_to_obj(link_shared, 'clang')
+		link_shared_opts = none_to_obj(link_shared_opts, '-shared -fPIC')
+		link_exe = none_to_obj(link_exe, 'clang')
+		link_exe_opts = none_to_obj(link_exe_opts, '')
 		External_linker.__init__(self, ctx,
 			link_static = link_static, link_static_opts = link_static_opts,
 			link_shared = link_shared, link_shared_opts = link_shared_opts,
@@ -468,9 +493,10 @@ class External_SimpleCompiler(External): # C family compiler
 
 
 class External_gcc(External_SimpleCompiler):
-	def __init__(self, ctx, version = None, std = None,
-			compiler = 'gcc', compiler_opts = '-Wall -pedantic',
-			ext_list = ['.c']):
+	def __init__(self, ctx, version = None, std = None, compiler = None, compiler_opts = None, ext_list = None):
+		compiler = none_to_obj(compiler, 'gcc')
+		compiler_opts = none_to_obj(compiler_opts, '-Wall -pedantic')
+		ext_list = none_to_obj(ext_list, ['.c'])
 		self._check_version(version, run_process([compiler, '--version'])[0].splitlines()[0].split()[-1])
 		External_SimpleCompiler.__init__(self, ctx, lang = 'compile_c',
 			compiler = compiler, compiler_opts = compiler_opts, var_prefix = 'CC', ext_list = ext_list)
@@ -479,9 +505,10 @@ External.available['gcc'] = External_gcc
 
 
 class External_gpp(External_SimpleCompiler):
-	def __init__(self, ctx, version = None, std = None,
-			compiler = 'g++', compiler_opts = '-Wall -pedantic',
-			ext_list = ['.cpp', '.cxx', '.cc']):
+	def __init__(self, ctx, version = None, std = None, compiler = None, compiler_opts = None, ext_list = None):
+		compiler = none_to_obj(compiler, 'g++')
+		compiler_opts = none_to_obj(compiler_opts, '-Wall -pedantic')
+		ext_list = none_to_obj(ext_list, ['.cpp', '.cxx', '.cc'])
 		self._check_version(version, run_process([compiler, '--version'])[0].splitlines()[0].split()[-1])
 		External_SimpleCompiler.__init__(self, ctx, lang = 'cpp',
 			compiler = compiler, compiler_opts = compiler_opts,
@@ -504,12 +531,14 @@ class External_gpp(External_SimpleCompiler):
 				value = 'c++1z'
 		External_SimpleCompiler._set_std(self, value)
 External.available['g++'] = External_gpp
+External.available['gpp'] = External_gpp
 
 
 class External_gfortran(External_SimpleCompiler):
-	def __init__(self, ctx, version = None, std = None,
-			compiler = 'gfortran', compiler_opts = '-Wall',
-			ext_list = ['.f']):
+	def __init__(self, ctx, version = None, std = None, compiler = None, compiler_opts = None, ext_list = None):
+		compiler = none_to_obj(compiler, 'gfortran')
+		compiler_opts = none_to_obj(compiler_opts, '-Wall')
+		ext_list = none_to_obj(ext_list, ['.f'])
 		self._check_version(version, run_process([compiler, '--version'])[0].splitlines()[0].split()[-1])
 		External_SimpleCompiler.__init__(self, ctx, lang = 'fortran',
 			compiler = compiler, compiler_opts = compiler_opts, var_prefix = 'F', ext_list = ext_list)
@@ -518,10 +547,11 @@ External.available['gfortran'] = External_gfortran
 
 
 class External_clang(External_SimpleCompiler):
-	def __init__(self, ctx, version = None, std = None,
-			compiler = 'clang', compiler_opts = '-Weverything -Wno-padded',
-			ext_list = ['.c']):
-		self._check_version(version, run_process([compiler, '--version'])[0].splitlines()[0].split()[-1])
+	def __init__(self, ctx, version = None, std = None, compiler = None, compiler_opts = None, ext_list = None):
+		compiler = none_to_obj(compiler, 'clang')
+		compiler_opts = none_to_obj(compiler_opts, '-Weverything -Wno-padded')
+		ext_list = none_to_obj(ext_list, ['.c'])
+		self._check_version(version, run_process([compiler, '--version'])[0].splitlines()[0].split()[2])
 		External_SimpleCompiler.__init__(self, ctx, lang = 'compile_c',
 			compiler = compiler, compiler_opts = compiler_opts, var_prefix = 'CC', ext_list = ext_list)
 		self._set_std(std)
@@ -529,9 +559,10 @@ External.available['clang'] = External_clang
 
 
 class External_clangpp(External_SimpleCompiler):
-	def __init__(self, ctx, version = None, std = None,
-			compiler = 'clang++', compiler_opts = '-Weverything -Wno-padded',
-			ext_list = ['.cpp', '.cxx', '.cc']):
+	def __init__(self, ctx, version = None, std = None, compiler = None, compiler_opts = None, ext_list = None):
+		compiler = none_to_obj(compiler, 'clang++')
+		compiler_opts = none_to_obj(compiler_opts, '-Weverything -Wno-padded')
+		ext_list = none_to_obj(ext_list, ['.cpp', '.cxx', '.cc'])
 		self._check_version(version, run_process([compiler, '--version'])[0].splitlines()[0].split()[2])
 		External_SimpleCompiler.__init__(self, ctx, lang = 'cpp',
 			compiler = compiler, compiler_opts = compiler_opts,
@@ -552,6 +583,7 @@ class External_clangpp(External_SimpleCompiler):
 				value = None
 		External_SimpleCompiler._set_std(self, value)
 External.available['clang++'] = External_clangpp
+External.available['clangpp'] = External_clangpp
 
 
 class External_SWIG(External):
@@ -607,12 +639,14 @@ External.available['pthread'] = External_pthread
 class External_libstdcpp(SimpleExternal):
 	def __init__(self, ctx):
 		SimpleExternal.__init__(self, ctx, link_shared = '-lstdc++', link_exe = '-lstdc++')
+External.available['libstdc++'] = External_libstdcpp
 External.available['libstdcpp'] = External_libstdcpp
 
 
 class External_libcpp(SimpleExternal):
 	def __init__(self, ctx):
 		SimpleExternal.__init__(self, ctx, link_shared = '-lc++', link_exe = '-lc++')
+External.available['libc++'] = External_libcpp
 External.available['libcpp'] = External_libcpp
 
 
@@ -738,13 +772,28 @@ class Registry(object):
 						target.drop_build_opt()
 
 		# Unify all rules with the same hash in rules_unique,
-		# identify rules with different hashes and same name and rename collisions
+		# identify rules with different hashes and same name and rename collisions (in name / variable name)
 		rules_unique = {}
 		rules_collisions = {}
+		rules_default_collisions = {}
 		for target, target_hash in target_hash_list:
 			rule_hash = target.build_rule.get_hash()
 			target.build_rule = rules_unique.setdefault(rule_hash, target.build_rule)
 			rules_collisions.setdefault(target.build_rule.name, []).append(rule_hash)
+			for key, value in target.build_rule.defaults.items():
+				rules_default_collisions.setdefault(key, {}).setdefault(value, []).append(target.build_rule)
+		rules_default_rename = {}
+		for key in rules_default_collisions:
+			if len(rules_default_collisions[key]) != 1:
+				for rules in rules_default_collisions[key].values():
+					for rule in rules:
+						rules_default_rename.setdefault(rule, set()).add(key)
+		for rule in rules_default_rename:
+			rule.defaults = dict(rule.defaults)
+			for key in rules_default_rename[rule]:
+					key_new = key + '_' + calc_hash(rule.defaults[key])
+					rule.cmd = rule.cmd.replace('$%s' % key, '$%s' % key_new).replace('${%s}' % key, '${%s}' % key_new)
+					rule.defaults[key_new] = rule.defaults.pop(key)
 		for rule_hash_list in rules_collisions.values():
 			if len(set(rule_hash_list)) != 1:
 				for rule_hash in rule_hash_list:
@@ -769,7 +818,7 @@ class Platform(object):
 class Context(object):
 	targets = []
 
-	def __init__(self, registry, platform, tool, toolchain,
+	def __init__(self, registry, platform, tools,
 			implicit_input = None,
 			implicit_object_input = None,
 			implicit_static_library_input = None,
@@ -780,7 +829,7 @@ class Context(object):
 			basedir_static_library = None,
 			basedir_shared_library = None,
 			basedir_executable = None):
-		(self.registry, self.platform, self.tool, self.toolchain) = (registry, platform, tool, toolchain)
+		(self.registry, self.platform, self.tools, self.toolchain) = (registry, platform, tools, tools.toolchain)
 		self.basedir = basedir
 		self.basedir_object_file = basedir_object_file
 		self.basedir_static_library = basedir_static_library
@@ -802,11 +851,16 @@ class Context(object):
 	def get_implicit_input(self, implicit_input):
 		return none_to_obj(implicit_input, []) + none_to_obj(self.implicit_input, [])
 
-	def toolchain(ctx, value, *args, **kwargs):
+	def find_toolchain(self, value, *args, **kwargs):
 		value == value.lower()
 		if value not in Toolchain.available:
 			raise Exception('Unknown toolchain %r' % value)
-		return Toolchain.available[value](ctx, *args, **kwargs)
+		return Toolchain.available[value](self, *args, **kwargs)
+
+	def use_toolchain(self, value, *args, **kwargs):
+		tc = self.find_toolchain(value, *args, **kwargs)
+		if tc:
+			self.tools.toolchain.append(tc)
 
 	def find_external(self, name, *args, **kwargs):
 		name == name.lower()
@@ -820,6 +874,12 @@ class Context(object):
 		except VersionError as e:
 			sys.stderr.write('VersionError(%s): %s\n' % (name, e.args[0]))
 
+	def use_external(self, name, *args, **kwargs):
+		ext = self.find_external(name, *args, **kwargs)
+		if ext:
+			self.implicit_input = none_to_obj(self.implicit_input, [])
+			self.implicit_input.append(ext)
+
 	def create_external(self, name, *args, **kwargs):
 		version = kwargs.pop('version', None)
 		external = create_build_helper_external(name, **kwargs)
@@ -829,7 +889,7 @@ class Context(object):
 		return self.find_external(name, *args, **kwargs_external)
 
 	def find_rule(self, ttfrom, ttto): # return a new instance going from target type (from -> to)
-		for lang, tool in sorted(self.tool.items()):
+		for lang, tool in sorted(self.tools.items()):
 			for r in tool.rules:
 				if r.connection == (ttfrom, ttto):
 					return Rule(r.connection, r.name, r.cmd, r.desc, r.defaults, **dict(r.params))
@@ -839,7 +899,7 @@ class Context(object):
 		result = set()
 		if hasattr(obj, 'name'):
 			ext = os.path.splitext(obj.name)[1].lower()
-			for lang, tool in sorted(self.tool.items()):
+			for lang, tool in sorted(self.tools.items()):
 				if ext in tool.target_types_by_ext:
 					result.add(tool.target_types_by_ext[ext])
 		return result
@@ -878,6 +938,7 @@ class Context(object):
 	def link(self, output_name, target_type, input_list, implicit_input_list,
 			add_self_to_on_use_inputs, link_mode = 'single', **kwargs):
 		input_list = self.force_build_source(input_list)
+		input_list.extend(self.platform.get_required_inputs(target_type, self.tools))
 		object_input = []
 		link_input = []
 		inputs_by_target_type = {}
@@ -912,7 +973,6 @@ class Context(object):
 						input_list = self.get_implicit_input(self.implicit_object_input) + input_list + object_input))
 			rule = self.find_rule('object', target_type)
 
-		input_list_new.extend(self.platform.get_required_inputs(target_type, self.tool))
 		target = self.create_target(output_name, rule = rule,
 			input_list = input_list_new + link_input,
 			add_self_to_on_use_inputs = add_self_to_on_use_inputs, **kwargs)
@@ -953,9 +1013,9 @@ class Context(object):
 
 def create_ctx(ctx, **kwargs):
 	platform = kwargs.pop('platform', ctx.platform)
-	tool = kwargs.pop('tool', dict(ctx.tool))
-	toolchain = kwargs.pop('toolchain', list(ctx.toolchain))
-	return Context(ctx.registry, platform, tool, toolchain, **kwargs)
+	tools = kwargs.pop('tools', ctx.tools.copy())
+	tools.toolchain = kwargs.pop('toolchain', list(ctx.tools.toolchain))
+	return Context(ctx.registry, platform, tools, **kwargs)
 
 
 def default_ctx_call(exec_dict, fun, keyword_only = False):
@@ -971,38 +1031,74 @@ def create_registered(registry, cls):
 	return create_registered_cls
 
 
+class ToolHolder(object):
+	def __init__(self, toolchain, tools = {}):
+		self._tools = tools
+		self.toolchain = toolchain
+	def copy(self):
+		return ToolHolder(list(self.toolchain), dict(self._tools))
+	def _update(self):
+		for tc in reversed(self.toolchain):
+			for tool in tc.tools:
+				if isinstance(self._tools.get(tool), (type(None), Delayed)):
+					if tc.tools[tool]:
+						try:
+							tool_instance = tc.tools[tool].get_instance()
+						except:
+							tool_instance = None
+						if tool_instance:
+							self._tools[tool] = tool_instance
+	def __repr__(self):
+		self._update()
+		return 'Tools(%s)' % repr(self._tools)
+	def __getitem__(self, key):
+		self._update()
+		return self._tools.__getitem__(key)
+	def __setitem__(self, key, value):
+		self._tools.__setitem__(key, value)
+	def __delitem__(self, key):
+		self._update()
+		self._tools.__delitem__(key)
+	def __iter__(self):
+		self._update()
+		return iter(self._tools)
+	def __len__(self):
+		self._update()
+		return len(self._tools)
+	def items(self):
+		self._update()
+		return self._tools.items()
+
+
 class Toolchain(object):
 	def __init__(self, ctx):
 		self._ctx = ctx
+		self.tools = {}
 
-	def _setdefault(self, lang, extcls, *args, **kwargs):
-		cext = self._ctx.tool.get(lang)
-		if isinstance(cext, (type(None), Delayed)):
-			ext = extcls(self._ctx, *args, **kwargs)
-			if ext:
-				self._ctx.tool[lang] = ext
+	def __repr__(self):
+		return nice_repr(self, 14)
 Toolchain.available = {}
 
 
 class Toolchain_GCC(Toolchain):
-	def __init__(self, ctx, version, c_std = None, c_opts = '', cpp_std = None, cpp_opts = '',
-			fortran_std = None, fortran_opts = '', link_shared_opts = '-shared -fPIC', link_exe_opts = ''):
+	def __init__(self, ctx, version = None, c_std = None, c_opts = None, cpp_std = None, cpp_opts = None,
+			fortran_std = None, fortran_opts = None, link_shared_opts = None, link_exe_opts = None):
 		Toolchain.__init__(self, ctx)
 
-		self._setdefault('linker', External_link_gcc, link_shared_opts = link_shared_opts, link_exe_opts = link_exe_opts)
-		self._setdefault('c', External_gcc, std = c_std, compiler_opts = c_opts)
-		self._setdefault('cpp', External_gpp, std = cpp_std, compiler_opts = cpp_opts)
-		self._setdefault('fortran', External_gfortran, std = fortran_std, compiler_opts = fortran_opts)
+		self.tools['linker'] = Delayed(External_link_gcc, ctx, link_shared_opts = link_shared_opts, link_exe_opts = link_exe_opts)
+		self.tools['c'] = Delayed(External_gcc, ctx, version = version, std = c_std, compiler_opts = c_opts)
+		self.tools['cpp'] = Delayed(External_gpp, ctx, version = version, std = cpp_std, compiler_opts = cpp_opts)
+		self.tools['fortran'] = Delayed(External_gfortran, ctx, version = version, std = fortran_std, compiler_opts = fortran_opts)
 
 
 class Toolchain_LLVM(Toolchain):
-	def __init__(self, ctx, version, c_std = None, c_opts = '', cpp_std = None, cpp_opts = '',
-			fortran_std = None, fortran_opts = '', link_shared_opts = '-shared -fPIC', link_exe_opts = ''):
+	def __init__(self, ctx, version = None, c_std = None, c_opts = None, cpp_std = None, cpp_opts = None,
+			fortran_std = None, fortran_opts = None, link_shared_opts = None, link_exe_opts = None):
 		Toolchain.__init__(self, ctx)
 
-		self._setdefault('linker', External_link_llvm, link_shared_opts = link_shared_opts, link_exe_opts = link_exe_opts)
-		self._setdefault('c', External_clang, std = c_std, compiler_opts = c_opts)
-		self._setdefault('cpp', External_clangpp, std = cpp_std, compiler_opts = cpp_opts)
+		self.tools['linker'] = Delayed(External_link_llvm, ctx, link_shared_opts = link_shared_opts, link_exe_opts = link_exe_opts)
+		self.tools['c'] = Delayed(External_clang, ctx, version = version, std = c_std, compiler_opts = c_opts)
+		self.tools['cpp'] = Delayed(External_clangpp, ctx, version = version, std = cpp_std, compiler_opts = cpp_opts)
 Toolchain.available['llvm'] = Toolchain_LLVM
 
 
@@ -1010,37 +1106,39 @@ def generate_build_file(bfn, ofn, mode):
 	pyrate_version = Version(__version__)
 	registry = Registry()
 	platform = Platform()
-	tool = {}
-	toolchain = []
-	ctx = Context(registry, platform, tool, toolchain)
-
-	ctx.tool['linker'] = Delayed(External_link_gcc, ctx)
-	ctx.tool['c'] = Delayed(External_gcc, ctx)
-	ctx.tool['cpp'] = Delayed(External_gpp, ctx)
+	tools = ToolHolder([])
+	ctx = Context(registry, platform, tools)
+	ctx.tools.toolchain.append(Toolchain_GCC(ctx))
 
 	exec_globals = {}
 	exec_globals.update({
-		'pyrate_version': pyrate_version,
-		'tool': tool,
-		'default_targets': None,
+		# globals
 		'default_context': ctx,
+		'default_targets': None,
 		'match': match,
+		'pyrate_version': pyrate_version,
+		'tools': tools,
+		'toolchain': tools.toolchain,
 		'version': VersionComparison(),
-		'find_external': default_ctx_call(exec_globals, Context.find_external),
-		'find_rule': default_ctx_call(exec_globals, Context.find_rule),
-		'object_file': default_ctx_call(exec_globals, Context.object_file),
+		# stable API
+		'create_external': default_ctx_call(exec_globals, Context.create_external),
 		'executable': default_ctx_call(exec_globals, Context.executable),
+		'find_external': default_ctx_call(exec_globals, Context.find_external),
+		'find_toolchain': default_ctx_call(exec_globals, Context.find_toolchain),
+		'object_file': default_ctx_call(exec_globals, Context.object_file),
 		'shared_library': default_ctx_call(exec_globals, Context.shared_library),
 		'static_library': default_ctx_call(exec_globals, Context.static_library),
-		'create_external': default_ctx_call(exec_globals, Context.create_external),
-		'toolchain': default_ctx_call(exec_globals, Context.create_external),
+		'use_external': default_ctx_call(exec_globals, Context.use_external),
+		'use_toolchain': default_ctx_call(exec_globals, Context.use_toolchain),
+		# development API
 		'BuildSource': BuildSource,
 		'BuildTarget': create_registered(registry, BuildTarget),
 		'BuildTargetFree': BuildTarget,
-		'External': default_ctx_call(exec_globals, External, keyword_only = True),
 		'Context': default_ctx_call(exec_globals, create_ctx),
+		'External': default_ctx_call(exec_globals, External, keyword_only = True),
 		'InputFile': InputFile,
 		'Rule': Rule,
+		'find_rule': default_ctx_call(exec_globals, Context.find_rule),
 	})
 	if mode:
 		exec_globals['build_system'] = 'makefile'

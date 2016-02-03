@@ -1,5 +1,6 @@
 #!/usr/bin/env pyrate
 
+tools['cpp'].std = 'c++11'
 lib_foo = shared_library('libExample7', ['foo.cpp'])
 python = find_external('python')
 swig = find_external('swig', version >= 2.0)

@@ -1,8 +1,8 @@
-struct FooStruct
+#include "foo.h"
+
+FooStruct::FooStruct(int _f) : f(_f)
 {
-	FooStruct(int _f) : f(_f) {}
-	int f;
-};
+}
 
 FooStruct bar(int x)
 {

@@ -1,13 +1,13 @@
 CXX = g++
-CXX_FLAGS = -Wall -pedantic
+CXX_FLAGS = -std=c++11 -Wall -pedantic
 rule compile_cpp
   command = $CXX $CXX_FLAGS ${opts} -MMD -MT $out -MF $out.d -c $in -o $out
   description = compile(cpp) $out
   depfile = $out.d
   deps = gcc
 
-LINKER_SHARED = g++
-LINKER_SHARED_FLAGS = -shared -g -fPIC
+LINKER_SHARED = gcc
+LINKER_SHARED_FLAGS = -shared -fPIC
 rule link_shared
   command = $LINKER_SHARED $LINKER_SHARED_FLAGS ${opts} -o $out $in
   description = link(shared) $out
@@ -19,9 +19,11 @@ rule swig_cpp_python
 build foo.o: compile_cpp foo.cpp
   opts = -fPIC
 build libExample7.so: link_shared foo.o
-build py_foo.cpp: swig_cpp_python foo.i
-  module_name = py_foo
+  opts = -lstdc++
 build py_foo.o: compile_cpp py_foo.cpp
   opts = -I/usr/include/python2.7 -I/usr/include/python2.7 -fno-strict-aliasing -O2 -pipe -fomit-frame-pointer -march=core2 -fwrapv -DNDEBUG -fPIC
+build py_foo.cpp: swig_cpp_python foo.i
+  module_name = py_foo
 build _py_foo.so: link_shared py_foo.o | libExample7.so
-  opts = -lpython2.7 -lpthread -ldl -lutil -lm -Xlinker -export-dynamic  -L. -lExample7
+  opts = -lpython2.7 -lpthread -ldl -lutil -lm -Xlinker -export-dynamic -L. -lExample7 -lstdc++
+build all: phony libExample7.so _py_foo.so

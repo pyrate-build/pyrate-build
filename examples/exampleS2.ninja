@@ -1,19 +1,19 @@
 CXX = clang++
-CXX_FLAGS = -std=c++11 -Weverything
+CXX_FLAGS = -std=c++11 -Wall
 rule compile_cpp
   command = $CXX $CXX_FLAGS ${opts} -MMD -MT $out -MF $out.d -c $in -o $out
   description = compile(cpp) $out
   depfile = $out.d
   deps = gcc
 
-LINKER_EXE = clang++
-LINKER_EXE_FLAGS = -g
-rule link_exe_02d88567f767774db8842d31b1f7c977
-  command = $LINKER_EXE $LINKER_EXE_FLAGS -L. -lFoo -o $out $in
+LINKER_EXE = clang
+LINKER_EXE_FLAGS = 
+rule link_exe_4353bcedd6eeaf2b4814aa2eedb31654
+  command = $LINKER_EXE $LINKER_EXE_FLAGS -L. -lFoo -pthread -lstdc++ -o $out $in
   description = link(exe) $out
 
-LINKER_SHARED = clang++
-LINKER_SHARED_FLAGS = -shared -g -fPIC
+LINKER_SHARED = clang
+LINKER_SHARED_FLAGS = -shared -fPIC
 rule link_shared
   command = $LINKER_SHARED $LINKER_SHARED_FLAGS ${opts} -o $out $in
   description = link(shared) $out
@@ -28,19 +28,23 @@ rule swig_cpp_python
   command = swig -c++ -python -I. ${opts} -module ${module_name} -o $out $in
   description = swig(C++ -> python) $out
 
-build foo_a00794ba68f424547f768bebc6282496.o: compile_cpp foo.cpp
+build foo_893c69ff505bcc7de307327c0c1e14bd.o: compile_cpp foo.cpp
   opts = -O3
-build libFoo.a: link_static foo_a00794ba68f424547f768bebc6282496.o
-build foo_e63d2608d620b1e1f96f610d320a7dbf.o: compile_cpp foo.cpp
+build libFoo.a: link_static foo_893c69ff505bcc7de307327c0c1e14bd.o
+build foo_4d0061ddc414bf7131cbbeb6cd537b5a.o: compile_cpp foo.cpp
   opts = -fPIC
-build libFoo.so: link_shared foo_e63d2608d620b1e1f96f610d320a7dbf.o
-build mylib.cpp: swig_cpp_python mylib.i
-  module_name = mylib
+build libFoo.so: link_shared foo_4d0061ddc414bf7131cbbeb6cd537b5a.o
+  opts = -lstdc++
 build mylib.o: compile_cpp mylib.cpp
   opts = -I/usr/include/python2.7 -I/usr/include/python2.7 -fno-strict-aliasing -O2 -pipe -fomit-frame-pointer -march=core2 -fwrapv -DNDEBUG -fPIC
+build mylib.cpp: swig_cpp_python foo.i
+  module_name = mylib
 build _mylib.so: link_shared mylib.o | libFoo.so
-  opts = -lpython2.7 -lpthread -ldl -lutil -lm -Xlinker -export-dynamic  -L. -lFoo
+  opts = -lpython2.7 -lpthread -ldl -lutil -lm -Xlinker -export-dynamic -L. -lFoo -lstdc++
 build test.o: compile_cpp test.cpp
-build test.bin: link_exe_02d88567f767774db8842d31b1f7c977 test.o | libFoo.so
+  opts = -pthread
+build test.bin: link_exe_4353bcedd6eeaf2b4814aa2eedb31654 test.o | libFoo.so
 build test_cpp11.o: compile_cpp test_cpp11.cpp
-build test_cpp11.bin: link_exe_02d88567f767774db8842d31b1f7c977 test_cpp11.o | libFoo.so
+  opts = -pthread
+build test_cpp11.bin: link_exe_4353bcedd6eeaf2b4814aa2eedb31654 test_cpp11.o | libFoo.so
+build all: phony libFoo.a libFoo.so _mylib.so test.bin test_cpp11.bin
