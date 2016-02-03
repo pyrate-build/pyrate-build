@@ -146,7 +146,7 @@ class NinjaBuildFileWriter(object):
 		self._vars[key] = value
 	def set_default(self, target_list, target_list_all):
 		self._fp.write('build all: phony %s\n' % str.join(' ', map(lambda t: t.name, target_list_all)))
-		if target_list != None:
+		if target_list is not None:
 			self._fp.write('default %s\n' % str.join(' ', map(lambda t: t.name, target_list)))
 	def write_rule(self, rule):
 		for key, value in sorted(rule.defaults.items()):
@@ -175,7 +175,8 @@ class MakefileWriter(object):
 		self._fp.write('%s := %s\n' % (key, value.strip()))
 	def set_default(self, target_list, target_list_all):
 		self._fp.write('all: %s\n' % str.join(' ', map(lambda t: t.name, target_list_all)))
-		self._fp.write('default: %s\n' % str.join(' ', map(lambda t: t.name, target_list)))
+		if target_list is not None:
+			self._fp.write('default: %s\n' % str.join(' ', map(lambda t: t.name, target_list)))
 		self._fp.write('.DEFAULT_GOAL := default\n')
 	def write_rule(self, rule):
 		for key, value in sorted(rule.defaults.items()):
@@ -359,17 +360,6 @@ class External(BuildSource):
 External.available = {}
 
 
-class External_SCM(External):
-	def _run(self, directory, *args):
-		dn = os.getcwd()
-		try:
-			os.chdir(directory)
-			return run_process(args)
-		except:
-			os.chdir(directory)
-			raise
-
-
 class External_linker(External):
 	def __init__(self, ctx,
 			link_static, link_static_opts, link_static_def, link_static_opts_def,
@@ -439,7 +429,7 @@ External.available['link-llvm'] = External_link_llvm
 class External_SimpleCompiler(External): # C family compiler
 	std = property(lambda self: self._std, lambda self, value: self._set_std(value))
 
-	def __init__(self, ctx, lang, std, compiler, compiler_opts, var_prefix, ext_list, req_input = {}):
+	def __init__(self, ctx, lang, std, compiler, compiler_opts, var_prefix, ext_list, req_input = None):
 		self._std = None
 		self._var_prefix = var_prefix
 		self._compiler_opts = compiler_opts
@@ -447,8 +437,9 @@ class External_SimpleCompiler(External): # C family compiler
 		required_inputs_by_target_type = {
 			'shared': [RuleVariables({'compile_' + lang: {'opts': ['-fPIC']}})],
 		}
-		for target_type in req_input:
-			required_inputs_by_target_type.setdefault(target_type, []).extend(req_input[target_type])
+		if req_input:
+			for target_type in req_input:
+				required_inputs_by_target_type.setdefault(target_type, []).extend(req_input[target_type])
 		External.__init__(self, ctx, rules = [
 				Rule((lang, 'object'), 'compile_' + lang,
 					'$%s $%s_FLAGS ${opts} -MMD -MT $out -MF $out.d -c $in -o $out' % (var_prefix, var_prefix),
@@ -467,7 +458,12 @@ class External_SimpleCompiler(External): # C family compiler
 			required_inputs_by_target_type = required_inputs_by_target_type)
 		self._set_std(std)
 
+	def get_latest(self):
+		raise Exception('Unable to find latest language standard!')
+
 	def _set_std(self, value):
+		if value == 'latest':
+			value = self.get_latest()
 		self._std = value
 		if not value:
 			opts = self._compiler_opts
@@ -499,19 +495,16 @@ class External_gpp(External_SimpleCompiler):
 				'exe': [External_libstdcpp(ctx)], 'shared': [External_libstdcpp(ctx)],
 				'static': [External_libstdcpp(ctx)]})
 
-	def _set_std(self, value):
-		if value == 'latest':
-			if self.version < 4.3:
-				value = 'c++03'
-			elif self.version < 4.7:
-				value = 'c++0x'
-			elif self.version < 4.8:
-				value = 'c++11'
-			elif self.version < 5.0:
-				value = 'c++14'
-			else:
-				value = 'c++1z'
-		External_SimpleCompiler._set_std(self, value)
+	def get_latest(self):
+		if self.version < 4.3:
+			return 'c++03'
+		elif self.version < 4.7:
+			return 'c++0x'
+		elif self.version < 4.8:
+			return 'c++11'
+		elif self.version < 5.0:
+			return 'c++14'
+		return 'c++1z'
 External.available['g++'] = External_gpp
 External.available['gpp'] = External_gpp
 
@@ -550,17 +543,13 @@ class External_clangpp(External_SimpleCompiler):
 				'exe': [External_libstdcpp(ctx)], 'shared': [External_libstdcpp(ctx)],
 				'static': [External_libstdcpp(ctx)]})
 
-	def _set_std(self, value):
-		if value == 'latest':
-			if self.version >= 3.5:
-				value = 'c++1z'
-			elif self.version >= 3.4:
-				value = 'c++14'
-			elif self.version >= 3.3:
-				value = 'c++11'
-			else:
-				value = None
-		External_SimpleCompiler._set_std(self, value)
+	def get_latest(self):
+		if self.version >= 3.5:
+			return 'c++1z'
+		elif self.version >= 3.4:
+			return 'c++14'
+		elif self.version >= 3.3:
+			return 'c++11'
 External.available['clang++'] = External_clangpp
 External.available['clangpp'] = External_clangpp
 
@@ -843,9 +832,8 @@ class Context(object):
 
 	def find_external(self, name, *args, **kwargs):
 		name == name.lower()
-		if name not in External.available:
-			if not define_pkg_config_external(name):
-				raise Exception('Unknown external %r' % name)
+		if name not in External.available and not define_pkg_config_external(name):
+			raise Exception('Unknown external %r' % name)
 		try:
 			return External.available[name](self, *args, **kwargs)
 		except ProcessError:
@@ -1011,22 +999,21 @@ def create_registered(registry, cls):
 
 
 class ToolHolder(object):
-	def __init__(self, toolchain, tools = {}):
+	def __init__(self, toolchain, tools):
 		self._tools = tools
 		self.toolchain = toolchain
 	def copy(self):
 		return ToolHolder(list(self.toolchain), dict(self._tools))
 	def _update(self):
 		for tc in reversed(self.toolchain):
-			for tool in tc.tools:
-				if isinstance(self._tools.get(tool), (type(None), Delayed)):
-					if tc.tools[tool]:
-						try:
-							tool_instance = tc.tools[tool].get_instance()
-						except:
-							tool_instance = None
-						if tool_instance:
-							self._tools[tool] = tool_instance
+			for toolname, toolfactory in tc.tools.items():
+				if toolfactory and isinstance(self._tools.get(toolname), (type(None), Delayed)):
+					try:
+						tool_instance = toolfactory.get_instance()
+					except Exception:
+						tool_instance = None
+					if tool_instance:
+						self._tools[toolname] = tool_instance
 	def __repr__(self):
 		self._update()
 		return 'Tools(%s)' % repr(self._tools)
@@ -1072,7 +1059,7 @@ class Toolchain_GCC(Toolchain):
 
 class Toolchain_LLVM(Toolchain):
 	def __init__(self, ctx, version = None, c_std = None, c_opts = None, cpp_std = None, cpp_opts = None,
-			fortran_std = None, fortran_opts = None, link_shared_opts = None, link_exe_opts = None):
+			link_shared_opts = None, link_exe_opts = None):
 		Toolchain.__init__(self, ctx)
 
 		self.tools['linker'] = Delayed(External_link_llvm, ctx, link_shared_opts = link_shared_opts, link_exe_opts = link_exe_opts)
@@ -1085,7 +1072,7 @@ def generate_build_file(bfn, ofn, mode):
 	pyrate_version = Version(__version__)
 	registry = Registry()
 	platform = Platform()
-	tools = ToolHolder([])
+	tools = ToolHolder([], {})
 	ctx = Context(registry, platform, tools)
 	ctx.tools.toolchain.append(Toolchain_GCC(ctx))
 
@@ -1135,9 +1122,8 @@ def generate_build_file(bfn, ofn, mode):
 	list(map(writer.write_rule, rules))
 	list(map(writer.write_target, targets))
 	default_targets = exec_globals['default_targets']
-	if default_targets:
-		if not isinstance(default_targets, (tuple, list)):
-			default_targets = [default_targets]
+	if default_targets and not isinstance(default_targets, (tuple, list)):
+		default_targets = [default_targets]
 	writer.set_default(default_targets, Context.targets)
 
 def main():

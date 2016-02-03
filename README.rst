@@ -457,11 +457,12 @@ Changelog
 
 - **0.2.0** changes
 
-  * renamed external packages: ``clang`` to ``clang++``, ``gcc`` to ``gpp``
-  * added external packages: ``clang``, ``gcc``, ``libstdcpp``, ``libcpp``, ``gfortran``,
+  * renamed external packages: ``clang`` to ``clang++``, ``gcc`` to ``g++``
+  * added external packages: ``clang``, ``gcc``, ``libstdc++``, ``libc++``, ``gfortran``,
     ``link-base``, ``link-gcc``, ``link-llvm``
   * renamed ``compiler`` variable to ``tools``, changed to lower case slot names, using ``cpp`` instead of ``C++``
   * added ``toolchain`` and ``find_toolchain`` to set multiple tools at once
+
 
 .. _ninja(s): https://github.com/ninja-build/ninja
 
