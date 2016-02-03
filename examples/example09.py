@@ -7,7 +7,7 @@ def print_ver(ext):
 			ver = repr(ext.version)
 		except Exception:
 			ver = 'Version(unavailable)'
-		logging.warning('external:%-20s\t%s' % (ext.__class__.__name__, ver))
+		logging.warning('external:%-20s\t%s', ext.__class__.__name__, ver)
 
 print_ver(create_external('wxwidgets', version >= 2.8, build_helper = 'wx-config',
 	version_query = '--version', link = '--libs', compile_cpp = '--cxxflags'))

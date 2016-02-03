@@ -13,7 +13,7 @@
 #-#  See the License for the specific language governing permissions and
 #-#  limitations under the License.
 
-__version__ = '0.2.0'
+__version__ = '0.2.1'
 
 import os, sys
 try:
@@ -245,7 +245,7 @@ class BuildSource(object):
 				result.setdefault(key, []).append(value)
 		return result
 
-	def get_hash(self, others = None):
+	def get_hash(self):
 		def get_dict_keys(src):
 			result = []
 			for key, value_list in sorted(src.items()):
@@ -257,7 +257,7 @@ class BuildSource(object):
 						result.append(value.get_hash())
 			return result
 		hash_tmp = get_dict_keys(self.on_use_inputs) + get_dict_keys(self.on_use_deps)
-		return calc_hash(none_to_obj(others, []) + hash_tmp + sorted(self.on_use_variables.items()))
+		return calc_hash(hash_tmp + sorted(self.on_use_variables.items()))
 
 	def __repr__(self):
 		return nice_repr(self, 14)
@@ -832,19 +832,19 @@ class Context(object):
 	def get_implicit_input(self, implicit_input):
 		return none_to_obj(implicit_input, []) + none_to_obj(self.implicit_input, [])
 
-	def find_toolchain(self, value, *args, **kwargs):
-		value == value.lower()
-		if value not in Toolchain.available:
-			raise Exception('Unknown toolchain %r' % value)
-		return Toolchain.available[value](self, *args, **kwargs)
+	def find_toolchain(self, name, *args, **kwargs):
+		name = name.lower()
+		if name not in Toolchain.available:
+			raise Exception('Unknown toolchain %r' % name)
+		return Toolchain.available[name](self, *args, **kwargs)
 
-	def use_toolchain(self, value, *args, **kwargs):
-		tc = self.find_toolchain(value, *args, **kwargs)
+	def use_toolchain(self, name, *args, **kwargs):
+		tc = self.find_toolchain(name, *args, **kwargs)
 		if tc:
 			self.tools.toolchain.append(tc)
 
 	def find_external(self, name, *args, **kwargs):
-		name == name.lower()
+		name = name.lower()
 		if name not in External.available and not define_pkg_config_external(name):
 			raise Exception('Unknown external %r' % name)
 		try:
@@ -862,7 +862,7 @@ class Context(object):
 
 	def create_external(self, name, *args, **kwargs):
 		version = kwargs.pop('version', None)
-		external = create_build_helper_external(name, **kwargs)
+		create_build_helper_external(name, **kwargs)
 		kwargs_external = {}
 		if version and ('version_query' in kwargs):
 			kwargs_external['version'] = version
