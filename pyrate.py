@@ -386,9 +386,15 @@ class External_SCM(External):
 
 class External_linker(External):
 	def __init__(self, ctx,
-			link_static, link_static_opts,
-			link_shared, link_shared_opts,
-			link_exe, link_exe_opts):
+			link_static, link_static_opts, link_static_def, link_static_opts_def,
+			link_shared, link_shared_opts, link_shared_def, link_shared_opts_def,
+			link_exe, link_exe_opts, link_exe_def, link_exe_opts_def):
+		link_static = none_to_obj(link_static, link_static_def)
+		link_static_opts = none_to_obj(link_static_opts, link_static_opts_def)
+		link_shared = none_to_obj(link_shared, link_shared_def)
+		link_shared_opts = none_to_obj(link_shared_opts, link_shared_opts_def)
+		link_exe = none_to_obj(link_exe, link_exe_def)
+		link_exe_opts = none_to_obj(link_exe_opts, link_exe_opts_def)
 		External.__init__(self, ctx,
 			rules = [
 				Rule(('object', 'static'), 'link_static',
@@ -406,16 +412,13 @@ class External_link_base(External_linker):
 	def __init__(self, ctx, link_static = None, link_static_opts = None,
 			link_shared = None, link_shared_opts = None,
 			link_exe = None, link_exe_opts = None):
-		link_static = none_to_obj(link_static, 'ar')
-		link_static_opts = none_to_obj(link_static_opts, 'rcs')
-		link_shared = none_to_obj(link_shared, 'ld')
-		link_shared_opts = none_to_obj(link_shared_opts, '-shared -fPIC')
-		link_exe = none_to_obj(link_exe, 'ld')
-		link_exe_opts = none_to_obj(link_exe_opts, '')
 		External_linker.__init__(self, ctx,
 			link_static = link_static, link_static_opts = link_static_opts,
+			link_static_def = 'ar', link_static_opts_def = 'rcs',
 			link_shared = link_shared, link_shared_opts = link_shared_opts,
-			link_exe = link_exe, link_exe_opts = link_exe_opts)
+			link_shared_def = 'ld', link_shared_opts_def = '-shared -fPIC',
+			link_exe = link_exe, link_exe_opts = link_exe_opts,
+			link_exe_def = 'ld', link_exe_opts_def = '')
 External.available['link-base'] = External_link_base
 
 
@@ -423,16 +426,13 @@ class External_link_gcc(External_linker):
 	def __init__(self, ctx, link_static = None, link_static_opts = None,
 			link_shared = None, link_shared_opts = None,
 			link_exe = None, link_exe_opts = None):
-		link_static = none_to_obj(link_static, 'gcc-ar')
-		link_static_opts = none_to_obj(link_static_opts, 'rcs')
-		link_shared = none_to_obj(link_shared, 'gcc')
-		link_shared_opts = none_to_obj(link_shared_opts, '-shared -fPIC')
-		link_exe = none_to_obj(link_exe, 'gcc')
-		link_exe_opts = none_to_obj(link_exe_opts, '')
 		External_linker.__init__(self, ctx,
 			link_static = link_static, link_static_opts = link_static_opts,
+			link_static_def = 'gcc-ar', link_static_opts_def = 'rcs',
 			link_shared = link_shared, link_shared_opts = link_shared_opts,
-			link_exe = link_exe, link_exe_opts = link_exe_opts)
+			link_shared_def = 'gcc', link_shared_opts_def = '-shared -fPIC',
+			link_exe = link_exe, link_exe_opts = link_exe_opts,
+			link_exe_def = 'gcc', link_exe_opts_def = '')
 External.available['link-gcc'] = External_link_gcc
 
 
@@ -440,16 +440,13 @@ class External_link_llvm(External_linker):
 	def __init__(self, ctx, link_static = None, link_static_opts = None,
 			link_shared = None, link_shared_opts = None,
 			link_exe = None, link_exe_opts = None):
-		link_static = none_to_obj(link_static, 'llvm-ar')
-		link_static_opts = none_to_obj(link_static_opts, 'rcs')
-		link_shared = none_to_obj(link_shared, 'clang')
-		link_shared_opts = none_to_obj(link_shared_opts, '-shared -fPIC')
-		link_exe = none_to_obj(link_exe, 'clang')
-		link_exe_opts = none_to_obj(link_exe_opts, '')
 		External_linker.__init__(self, ctx,
 			link_static = link_static, link_static_opts = link_static_opts,
+			link_static_def = 'llvm-ar', link_static_opts_def = 'rcs',
 			link_shared = link_shared, link_shared_opts = link_shared_opts,
-			link_exe = link_exe, link_exe_opts = link_exe_opts)
+			link_shared_def = 'clang', link_shared_opts_def = '-shared -fPIC',
+			link_exe = link_exe, link_exe_opts = link_exe_opts,
+			link_exe_def = 'clang', link_exe_opts_def = '')
 External.available['link-llvm'] = External_link_llvm
 
 
