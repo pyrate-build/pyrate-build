@@ -43,7 +43,14 @@ for EXAMPLE in exampleM1.py; do
 	run_test_make $EXAMPLE
 done
 
+echo "no args"
+cp example01.py build.py
+$EXEC
+echo "makefile cmd line opt"
+$EXEC -M
+
 set +e
+$EXEC example01.py example02.py
 
 TESTS=""
 if [ -n "$(which swig 2> /dev/null)" ]; then
