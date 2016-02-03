@@ -130,24 +130,10 @@ def match(value, dn = '.'):
 class Delayed(object):
 	def __init__(self, cls, *args, **kwargs):
 		(self._cls, self._args, self._kwargs) = (cls, args, kwargs)
-		self._delayed_instance = None
 	def get_instance(self):
-		if not self._delayed_instance:
-			self._delayed_instance = self._cls(*self._args, **self._kwargs)
-		return self._delayed_instance
-	def __setattr__(self, name, value):
-		if name in ['_cls', '_args', '_kwargs', '_delayed_instance']:
-			return object.__setattr__(self, name, value)
-		return self.get_instance().__setattr__(name, value)
-	def __getattribute__(self, name):
-		if name in ['_cls', '_args', '_kwargs', '_delayed_instance', 'get_instance']:
-			return object.__getattribute__(self, name)
-		return self.get_instance().__getattribute__(name)
+		return self._cls(*self._args, **self._kwargs)
 	def __repr__(self):
-		if self._delayed_instance:
-			return 'Delayed(%s)' % repr(self._delayed_instance)
-		else:
-			return 'Delayed(%s(*%s, **%s))' % (self._cls, self._args, self._kwargs)
+		return 'Delayed(%s(*%s, **%s))' % (self._cls, self._args, self._kwargs)
 
 
 class NinjaBuildFileWriter(object):
