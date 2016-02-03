@@ -453,7 +453,7 @@ External.available['link-llvm'] = External_link_llvm
 class External_SimpleCompiler(External): # C family compiler
 	std = property(lambda self: self._std, lambda self, value: self._set_std(value))
 
-	def __init__(self, ctx, lang, compiler, compiler_opts, var_prefix, ext_list, req_input = {}):
+	def __init__(self, ctx, lang, std, compiler, compiler_opts, var_prefix, ext_list, req_input = {}):
 		self._std = None
 		self._var_prefix = var_prefix
 		self._compiler_opts = compiler_opts
@@ -479,6 +479,7 @@ class External_SimpleCompiler(External): # C family compiler
 			],
 			target_types_by_ext = dict.fromkeys(ext_list, lang),
 			required_inputs_by_target_type = required_inputs_by_target_type)
+		self._set_std(std)
 
 	def _set_std(self, value):
 		self._std = value
@@ -495,9 +496,8 @@ class External_gcc(External_SimpleCompiler):
 		compiler_opts = none_to_obj(compiler_opts, '-Wall -pedantic')
 		ext_list = none_to_obj(ext_list, ['.c'])
 		self._check_version(version, run_process([compiler, '--version'])[0].splitlines()[0].split()[-1])
-		External_SimpleCompiler.__init__(self, ctx, lang = 'compile_c',
+		External_SimpleCompiler.__init__(self, ctx, std = std, lang = 'compile_c',
 			compiler = compiler, compiler_opts = compiler_opts, var_prefix = 'CC', ext_list = ext_list)
-		self._set_std(std)
 External.available['gcc'] = External_gcc
 
 
@@ -507,12 +507,11 @@ class External_gpp(External_SimpleCompiler):
 		compiler_opts = none_to_obj(compiler_opts, '-Wall -pedantic')
 		ext_list = none_to_obj(ext_list, ['.cpp', '.cxx', '.cc'])
 		self._check_version(version, run_process([compiler, '--version'])[0].splitlines()[0].split()[-1])
-		External_SimpleCompiler.__init__(self, ctx, lang = 'cpp',
+		External_SimpleCompiler.__init__(self, ctx, std = std, lang = 'cpp',
 			compiler = compiler, compiler_opts = compiler_opts,
 			var_prefix = 'CXX', ext_list = ext_list, req_input = {
 				'exe': [External_libstdcpp(ctx)], 'shared': [External_libstdcpp(ctx)],
 				'static': [External_libstdcpp(ctx)]})
-		self._set_std(std)
 
 	def _set_std(self, value):
 		if value == 'latest':
@@ -537,9 +536,8 @@ class External_gfortran(External_SimpleCompiler):
 		compiler_opts = none_to_obj(compiler_opts, '-Wall')
 		ext_list = none_to_obj(ext_list, ['.f'])
 		self._check_version(version, run_process([compiler, '--version'])[0].splitlines()[0].split()[-1])
-		External_SimpleCompiler.__init__(self, ctx, lang = 'fortran',
+		External_SimpleCompiler.__init__(self, ctx, std = std, lang = 'fortran',
 			compiler = compiler, compiler_opts = compiler_opts, var_prefix = 'F', ext_list = ext_list)
-		self._set_std(std)
 External.available['gfortran'] = External_gfortran
 
 
@@ -549,9 +547,8 @@ class External_clang(External_SimpleCompiler):
 		compiler_opts = none_to_obj(compiler_opts, '-Weverything -Wno-padded')
 		ext_list = none_to_obj(ext_list, ['.c'])
 		self._check_version(version, run_process([compiler, '--version'])[0].splitlines()[0].split()[2])
-		External_SimpleCompiler.__init__(self, ctx, lang = 'compile_c',
+		External_SimpleCompiler.__init__(self, ctx, std = std, lang = 'compile_c',
 			compiler = compiler, compiler_opts = compiler_opts, var_prefix = 'CC', ext_list = ext_list)
-		self._set_std(std)
 External.available['clang'] = External_clang
 
 
@@ -561,12 +558,11 @@ class External_clangpp(External_SimpleCompiler):
 		compiler_opts = none_to_obj(compiler_opts, '-Weverything -Wno-padded')
 		ext_list = none_to_obj(ext_list, ['.cpp', '.cxx', '.cc'])
 		self._check_version(version, run_process([compiler, '--version'])[0].splitlines()[0].split()[2])
-		External_SimpleCompiler.__init__(self, ctx, lang = 'cpp',
+		External_SimpleCompiler.__init__(self, ctx, std = std, lang = 'cpp',
 			compiler = compiler, compiler_opts = compiler_opts,
 			var_prefix = 'CXX', ext_list = ext_list, req_input = {
 				'exe': [External_libstdcpp(ctx)], 'shared': [External_libstdcpp(ctx)],
 				'static': [External_libstdcpp(ctx)]})
-		self._set_std(std)
 
 	def _set_std(self, value):
 		if value == 'latest':
