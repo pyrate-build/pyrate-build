@@ -11,6 +11,9 @@ fi
 if [ -n "$(which coverage 2> /dev/null)" ]; then
 	EXEC="coverage run -a $EXEC"
 fi
+if [ -n "$(python --version 2>&1 | grep "Python 2.6")" ]; then
+	export PYTHONOPTPARSE="1"
+fi
 echo "Running $EXEC"
 
 run_test() {

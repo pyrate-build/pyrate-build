@@ -1144,6 +1144,8 @@ def main():
 	def parse_arguments():
 		version_info = 'pyrate version ' + __version__
 		try:
+			if os.environ.get('PYTHONOPTPARSE'):
+				raise ImportError()
 			import argparse
 			parser = argparse.ArgumentParser()
 			parser.add_argument('build_file', nargs = '?', default = 'build.py',
