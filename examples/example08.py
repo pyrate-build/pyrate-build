@@ -16,3 +16,7 @@ exe1 = executable('example08_default_ctx.bin', ['test_cpp11.cpp', 'foo.cpp', pth
 exe2 = ctx.executable('example08_own_ctx.bin', ['test_cpp11.cpp', 'foo.cpp', pthread], compiler_opts = '-O3')
 default_targets = exe1
 repr(exe1)
+repr(tools)
+len(tools)
+for tool in tools:
+	repr(tool)

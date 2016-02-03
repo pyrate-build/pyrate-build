@@ -6,5 +6,5 @@ rule compile_link_exe_cpp
   depfile = $out.d
   deps = gcc
 
-build example10.bin: compile_link_exe_cpp test.cpp foo.cpp
-build all: phony example10.bin
+build obj/example10.bin: compile_link_exe_cpp test.cpp foo.cpp
+build all: phony obj/example10.bin
