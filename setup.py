@@ -22,7 +22,7 @@ setup(
 	license='License :: OSI Approved :: Apache Software License',
 	platforms=['Operating System :: OS Independent'],
 	classifiers=[
-		'Development Status :: 3 - Alpha',
+		'Development Status :: 4 - Beta',
 		'Intended Audience :: Developers',
 		'Topic :: Software Development :: Build Tools',
 		'License :: OSI Approved :: Apache Software License',

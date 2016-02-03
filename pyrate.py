@@ -434,11 +434,12 @@ class External_SimpleCompiler(External): # C family compiler
 		self._compiler_opts = compiler_opts
 		self._compiler_variables = {var_prefix: compiler, var_prefix + '_FLAGS': self._compiler_opts}
 		required_inputs_by_target_type = {
-			'shared': [RuleVariables({'compile_' + lang: {'opts': ['-fPIC']}})],
+			'linux': {'shared': [RuleVariables({'compile_' + lang: {'opts': ['-fPIC']}})]},
 		}
 		if req_input:
-			for target_type in req_input:
-				required_inputs_by_target_type.setdefault(target_type, []).extend(req_input[target_type])
+			for platform in required_inputs_by_target_type:
+				for target_type in req_input:
+					required_inputs_by_target_type[platform].setdefault(target_type, []).extend(req_input[target_type])
 		External.__init__(self, ctx, rules = [
 				Rule((lang, 'object'), 'compile_' + lang,
 					'$%s $%s_FLAGS ${opts} -MMD -MT $out -MF $out.d -c $in -o $out' % (var_prefix, var_prefix),
@@ -464,7 +465,7 @@ class External_SimpleCompiler(External): # C family compiler
 		return default
 
 	def get_latest(self):
-		raise Exception('Unable to find latest language standard!')
+		raise Exception('%s: Unable to find latest language standard!' % self.__class__.__name__)
 
 	def _set_std(self, value):
 		if value == 'latest':
@@ -774,13 +775,25 @@ class Registry(object):
 
 class Platform(object):
 	def __init__(self):
+		self.name = 'linux'
 		self.extensions = {'object': '.o', 'shared': '.so', 'static': '.a', 'exe': ''}
 
 	def get_required_inputs(self, target_type, compiler_dict):
 		result = []
 		for lang, compiler in sorted(compiler_dict.items()):
-			result.extend(compiler.required_inputs_by_target_type.get(target_type, []))
+			result.extend(compiler.required_inputs_by_target_type.get(self.name, {}).get(target_type, []))
 		return result
+
+
+def force_build_source(input_list):
+	input_list = none_to_obj(input_list, [])
+	if isinstance(input_list, str): # support accepting user supplied space separated string
+		input_list = input_list.split()
+	def translate_str(value):
+		if isinstance(value, str):
+			return InputFile(value)
+		return value
+	return list(map(translate_str, input_list))
 
 
 class Context(object):
@@ -871,16 +884,6 @@ class Context(object):
 					result.add(tool.target_types_by_ext[ext])
 		return result
 
-	def force_build_source(self, input_list):
-		input_list = none_to_obj(input_list, [])
-		if isinstance(input_list, str): # support accepting user supplied space separated string
-			input_list = input_list.split()
-		def translate_str(value):
-			if isinstance(value, str):
-				return InputFile(value)
-			return value
-		return list(map(translate_str, input_list))
-
 	def create_target(self, target_name, rule, input_list, add_self_to_on_use_inputs, **kwargs):
 		on_use_inputs = kwargs.pop('on_use_inputs', {})
 		if add_self_to_on_use_inputs:
@@ -889,7 +892,7 @@ class Context(object):
 		return self.registry.register_target(target)
 
 	def object_file(self, obj_name, input_list = None, compiler_opts = None, **kwargs):
-		input_list = self.force_build_source(input_list)
+		input_list = force_build_source(input_list)
 		# collect rules from the input object extensions
 		target_types = set()
 		for target_types_new in map(self.find_target_types, input_list):
@@ -904,7 +907,7 @@ class Context(object):
 
 	def link(self, output_name, target_type, input_list, implicit_input_list,
 			add_self_to_on_use_inputs, link_mode = 'single', **kwargs):
-		input_list = self.force_build_source(input_list)
+		input_list = force_build_source(input_list)
 		input_list.extend(self.platform.get_required_inputs(target_type, self.tools))
 		object_input = []
 		link_input = []
@@ -1004,7 +1007,7 @@ class ToolHolder(object):
 	def _update(self):
 		for tc in reversed(self.toolchain):
 			for toolname, toolfactory in tc.tools.items():
-				if toolfactory and isinstance(self._tools.get(toolname), (type(None), Delayed)):
+				if toolfactory and not self._tools.get(toolname):
 					try:
 						tool_instance = toolfactory.get_instance()
 					except Exception:
@@ -1052,6 +1055,7 @@ class Toolchain_GCC(Toolchain):
 		self.tools['c'] = Delayed(External_gcc, ctx, version = version, std = c_std, compiler_opts = c_opts)
 		self.tools['cpp'] = Delayed(External_gpp, ctx, version = version, std = cpp_std, compiler_opts = cpp_opts)
 		self.tools['fortran'] = Delayed(External_gfortran, ctx, version = version, std = fortran_std, compiler_opts = fortran_opts)
+Toolchain.available['gcc'] = Toolchain_GCC
 
 
 class Toolchain_LLVM(Toolchain):
