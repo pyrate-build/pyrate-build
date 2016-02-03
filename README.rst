@@ -340,19 +340,13 @@ Currently the following builtin externals are supported (listed with all possibl
 
 - ``gcc`` - GNU C compiler
 - ``clang`` - LLVM C compiler
-
-  * ``version`` - specifies required version (eg. ``version >= 5.2``)
-  * ``std`` - C language standard version (eg. ``'gnu99'``).
-    A property with the same name allows to also set this value on an existing external (eg. ``tool['c'].std = 'c90'``).
-  * ``compiler`` - name of the executable
-  * ``compiler_opts`` - options that are used during the compilation stage
-
 - ``g++``, ``gpp`` - GNU C++ compiler
 - ``clang++``, ``clangpp`` - LLVM C++ compiler
+- ``gfortran`` - GNU Fortran compiler
 
-  * ``version`` - specifies required version (eg. ``version >= 3.7``)
-  * ``std`` - C++ language standard version (eg. ``'c++14'`` or ``'latest'``).
-    A property with the same name allows to also set this value on an existing external (eg. ``tool['cpp'].std = 'latest'``).
+  * ``version`` - specifies required version (eg. ``version >= 5.2``)
+  * ``std`` - language standard version (eg. ``'c++14'`` or ``'latest'``).
+    A property with the same name allows to also set this value on an existing external (eg. ``tool['c'].std = 'c90'``).
   * ``compiler`` - name of the executable
   * ``compiler_opts`` - options that are used during the compilation stage
 
@@ -401,7 +395,9 @@ Toolchains
 
 The following toolchains are currently available:
 
--  ``gcc`` - the GNU compiler collection
+- ``gcc`` - the GNU compiler collection
+  This toolchain will activate the ``gcc`` C compiler, ``g++`` C++ compiler and the
+  ``gfortran`` Fortran compiler. Linking will be done with ``link-gcc`` as driver.
 
   * ``version`` - requested version
   * ``c_std``, ``c_opts`` - control the std and flags of the ``gcc`` external
@@ -409,7 +405,9 @@ The following toolchains are currently available:
   * ``fortran_std``, ``fortran_opts`` - control the std and flags of the ``gfortran`` external
   * ``link_shared_opt``, ``link_exe_opt`` - control the linker settings
 
--  ``llvm`` - the LLVM Compiler Infrastructure
+- ``llvm`` - the LLVM Compiler Infrastructure
+  This toolchain will activate the ``clang`` C compiler and the ``clang++`` C++ compiler.
+  Linking will be done with ``link-llvm`` package.
 
   * ``version`` - requested version
   * ``c_std``, ``c_opts`` - control the std and flags of the ``clang`` external
