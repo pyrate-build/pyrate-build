@@ -13,7 +13,7 @@
 #-#  See the License for the specific language governing permissions and
 #-#  limitations under the License.
 
-__version__ = '0.2.1'
+__version__ = '0.2.2'
 
 import os, sys
 try:
@@ -573,8 +573,7 @@ class External_SWIG(External):
 		swig_rule = Rule(('swig', 'c++'), 'swig_cpp_%s' % lang,
 			'swig -c++ -%s -I. ${opts} -module ${module_name} -o $out $in' % lang,
 			'swig(C++ -> %s) $out' % lang, {})
-		(src_name, ext) = get_normed_name(name, '.cpp')
-		wrapper_src = BuildTarget(src_name, swig_rule,
+		wrapper_src = BuildTarget(get_normed_name(name, '.cpp'), swig_rule,
 			[InputFile(ifile)] + add_rule_vars(opts = swig_opts, module_name = name),
 			on_use_inputs = {None: [SelfReference()]},
 			on_use_variables = wrapper_ext.on_use_variables)
@@ -674,103 +673,141 @@ define_non_pkg_config_externals()
 
 
 def get_normed_name(fn, forced_ext):
-	(root, ext) = os.path.splitext(fn)
-	return (root + forced_ext, ext.lstrip('.'))
+	return os.path.splitext(fn)[0] + forced_ext
 
 
 class Registry(object):
 	def __init__(self):
 		self.target_list = []
+		self.rename_all_targets = False
+		self.rename_all_constants = False
+		self.rename_all_rules = False
+		self.fold_target_opts = True
 
 	def register_target(self, target):
 		assert(isinstance(target, BuildTarget))
 		self.target_list.append(target)
 		return target
 
-	def write(self):
-		# deduplicate targets in target_list (and recursively in build_src) based on hash
-		target_hash_list = []
-		target_hash_seen = {}
-		priority_targets = {}
+	def _collect_target_infos(self):
+		# collect information about target infos
+		# and deduplicate targets in target_list (and recursively in build_src) based on hash
+		target_by_thash = {}
+		target_order = []
+		targets_by_topts_by_rhash = {}
+		thashs_by_name = {}
+		thashs_no_rename = set()
 		def update_target_hash_list(target, target_hash):
+			known_target = target_by_thash.get(target_hash)
 			if target.no_rename:
-				priority_targets[target_hash] = target
-			if target_hash not in target_hash_seen:
-				target_hash_list.append((target, target_hash))
-				target_hash_seen[target_hash] = target
-				def deduplicate_targets(src):
+				thashs_no_rename.add(target_hash)
+			if known_target and target.no_rename:
+				known_target.no_rename = True # mark no_rename target
+			if not known_target:
+				target_order.append(target)
+				target_by_thash[target_hash] = target
+
+				rhash = target.build_rule.get_hash()
+				topts = target.get_build_variables().get('opts', '')
+				targets_by_topts_by_rhash.setdefault(rhash, {}).setdefault(topts, set()).add(target)
+				thashs_by_name.setdefault(target.name, set()).add(target_hash)
+
+				# recurse into sources of target
+				for idx, src in enumerate(target.build_src):
 					if isinstance(src, BuildTarget):
 						src_hash = src.get_hash()
 						update_target_hash_list(src, src_hash)
-						return target_hash_seen[src_hash]
-					return src
-				target.build_src = list(map(deduplicate_targets, target.build_src))
+						target.build_src[idx] = target_by_thash[src_hash]
 		for target in self.target_list: # recurse to find all targets
 			update_target_hash_list(target, target.get_hash())
+		return (target_by_thash, thashs_by_name, thashs_no_rename, targets_by_topts_by_rhash, target_order)
 
-		# identify targets with the same name but different configuration and
-		# find all used rules (and their parameters)
-		rules_used_variables = {}
-		target_collisions = {}
-		target_no_rename = set()
-		for idx, (target, target_hash) in enumerate(target_hash_list):
-			target = priority_targets.get(target_hash, target)
-			target_hash_list[idx] = (target, target_hash)
-			target_opts = target.get_build_variables().get('opts', '')
-			rules_used_variables.setdefault(target.build_rule.get_hash(), {}).setdefault(target_opts, []).append(target)
-			target_collisions.setdefault(target.name, []).append(target_hash)
-			if target.no_rename:
-				if target.name in target_no_rename:
-					raise Exception('Multiple targets (%r) requested no renaming!' % target.name)
-				target_no_rename.add(target.name)
-		# rename colliding targets
-		for target, target_hash in target_hash_list:
-			target = priority_targets.get(target_hash, target)
-			if (len(set(target_collisions.get(target.name, []))) != 1) and not target.no_rename:
+	def _rename_targets(self, target_by_thash, thashs_by_name, thashs_no_rename):
+		# rename targets with different hashs and same name - except no_rename was set
+		for thash_list_same_names in thashs_by_name.values():
+			if (len(thash_list_same_names) < 2) and not self.rename_all_targets:
+				continue
+			blocked_rename = False
+			for thash in thash_list_same_names:
+				target = target_by_thash[thash]
+				if thash in thashs_no_rename:
+					if blocked_rename:
+						raise Exception('Multiple targets (%r) requested no renaming!' % target.name)
+					blocked_rename = True
+					continue
 				(root, ext) = os.path.splitext(target.name)
-				target.name = root + '_' + target_hash + ext
+				target.name = root + '_' + thash + ext
+		# thash invalidated by rename
+		target_by_thash.clear()
+		thashs_by_name.clear()
+		thashs_no_rename.clear()
 
+	def _fold_target_opts(self, targets_by_topts_by_rhash):
 		# identify rules with a fixed set of parameters to fold them into the rule definition
-		for opts_of_targets in rules_used_variables.values():
-			if len(opts_of_targets) == 1: # the rule 'rule_name' is always called with the same opts
-				target_opts, targets = list(opts_of_targets.items())[0]
-				if target_opts and (len(targets) > 1): # ignore if the rule is only called once anyway
-					for target in targets:
-						target.build_rule.cmd = target.build_rule.cmd.replace('${opts}', target_opts)
+		for targets_by_topts in targets_by_topts_by_rhash.values():
+			if (len(targets_by_topts) > 1) or not self.fold_target_opts: # the rule 'rule_name' is called with the different opts
+				continue
+			for (topts, target_set) in targets_by_topts.items():
+				if not topts or (len(target_set) < 2): # ignore if the rule is only called once anyway or opts is empty
+					continue
+				for target in target_set:
+					target.build_rule.cmd = target.build_rule.cmd.replace('${opts}', topts)
+					if not self.rename_all_rules: # otherwise it will be done later
 						target.build_rule.name += '_' + target.build_rule.get_hash()
-						target.drop_build_opt()
+					target.drop_build_opt()
+		targets_by_topts_by_rhash.clear() # rhash invalidated by folding
 
-		# Unify all rules with the same hash in rules_unique,
-		# identify rules with different hashes and same name and rename collisions (in name / variable name)
-		rules_unique = {}
-		rules_collisions = {}
-		rules_default_collisions = {}
-		for target, target_hash in target_hash_list:
-			rule_hash = target.build_rule.get_hash()
-			target.build_rule = rules_unique.setdefault(rule_hash, target.build_rule)
-			rules_collisions.setdefault(target.build_rule.name, []).append(rule_hash)
-			for key, value in target.build_rule.defaults.items():
-				rules_default_collisions.setdefault(key, {}).setdefault(value, []).append(target.build_rule)
-		rules_default_rename = {}
-		for key in rules_default_collisions:
-			if len(rules_default_collisions[key]) != 1:
-				for rules in rules_default_collisions[key].values():
-					for rule in rules:
-						rules_default_rename.setdefault(rule, set()).add(key)
-		for rule in rules_default_rename:
-			rule.defaults = dict(rule.defaults)
-			for key in rules_default_rename[rule]:
-					key_new = key + '_' + calc_hash(rule.defaults[key])
-					rule.cmd = rule.cmd.replace('$%s' % key, '$%s' % key_new).replace('${%s}' % key, '${%s}' % key_new)
-					rule.defaults[key_new] = rule.defaults.pop(key)
-		for rule_hash_list in rules_collisions.values():
-			if len(set(rule_hash_list)) != 1:
-				for rule_hash in rule_hash_list:
-					rules_unique[rule_hash].name += '_' + target.build_rule.get_hash()
+	def _process_rules(self, target_list):
+		rule_order = []
+		rule_by_rhash = {}
+		rules_by_rvalues_by_rkeys = {}
+		for target in target_list:
+			rhash = target.build_rule.get_hash()
+			known_rule = rule_by_rhash.get(rhash)
+			if not known_rule:
+				known_rule = target.build_rule
+				rule_by_rhash[rhash] = known_rule
+				rule_order.append(known_rule)
+			target.build_rule = known_rule
+			known_rule.defaults = dict(known_rule.defaults)
+			for key, value in known_rule.defaults.items():
+				rules_by_rvalues_by_rkeys.setdefault(key, {}).setdefault(value, set()).add(known_rule)
 
-		write_rules = sorted(rules_unique.values(), key = lambda r: r.name)
-		write_targets = list(map(lambda t_th: t_th[0], target_hash_list))
-		return (write_rules, write_targets)
+		self._rename_rule_constants(rules_by_rvalues_by_rkeys)
+		self._rename_rule_names(rule_order)
+		return rule_order
+
+	def _rename_rule_constants(self, rules_by_rvalues_by_rkeys):
+		for rkey in rules_by_rvalues_by_rkeys:
+			if (len(rules_by_rvalues_by_rkeys[rkey]) < 2) and not self.rename_all_constants:
+				continue
+			for rule_list in rules_by_rvalues_by_rkeys[rkey].values():
+				for rule in rule_list:
+					rkey_new = rkey + '_' + calc_hash(rule.defaults[rkey])
+					rule.cmd = rule.cmd.replace('$%s' % rkey, '$%s' % rkey_new).replace('${%s}' % rkey, '${%s}' % rkey_new)
+					rule.defaults[rkey_new] = rule.defaults.pop(rkey)
+		rules_by_rvalues_by_rkeys.clear() # invalidated by rkey rename
+
+	def _rename_rule_names(self, rule_order):
+		# this catches rules with same names and different commands (unlikely but possible)
+		rule_by_rhash = {}
+		rhashs_by_name = {}
+		for rule in rule_order:
+			rhash = rule.get_hash()
+			rule_by_rhash[rhash] = rule
+			rhashs_by_name.setdefault(rule.name, set()).add(rhash)
+		for rhash_set in rhashs_by_name.values():
+			if (len(rhash_set) > 1) or self.rename_all_rules:
+				for rhash in rhash_set:
+					rule_by_rhash[rhash].name += '_' + rhash
+
+	def write(self):
+		(target_by_thash, thashs_by_name, thashs_no_rename, targets_by_topts_by_rhash, target_order) =\
+			self._collect_target_infos()
+		self._rename_targets(target_by_thash, thashs_by_name, thashs_no_rename)
+		self._fold_target_opts(targets_by_topts_by_rhash)
+		rule_order = self._process_rules(target_order)
+		return (sorted(rule_order, key = lambda r: r.name), target_order)
 
 
 class Platform(object):
@@ -778,10 +815,10 @@ class Platform(object):
 		self.name = 'linux'
 		self.extensions = {'object': '.o', 'shared': '.so', 'static': '.a', 'exe': ''}
 
-	def get_required_inputs(self, target_type, compiler_dict):
+	def get_required_inputs(self, target_type, toolholder):
 		result = []
-		for lang, compiler in sorted(compiler_dict.items()):
-			result.extend(compiler.required_inputs_by_target_type.get(self.name, {}).get(target_type, []))
+		for tool in toolholder.get_tools():
+			result.extend(tool.required_inputs_by_target_type.get(self.name, {}).get(target_type, []))
 		return result
 
 
@@ -869,7 +906,7 @@ class Context(object):
 		return self.find_external(name, *args, **kwargs_external)
 
 	def find_rule(self, ttfrom, ttto): # return a new instance going from target type (from -> to)
-		for lang, tool in sorted(self.tools.items()):
+		for tool in self.tools.get_tools():
 			for r in tool.rules:
 				if r.connection == (ttfrom, ttto):
 					return Rule(r.connection, r.name, r.cmd, r.desc, r.defaults, **dict(r.params))
@@ -879,7 +916,7 @@ class Context(object):
 		result = set()
 		if hasattr(obj, 'name'):
 			ext = os.path.splitext(obj.name)[1].lower()
-			for lang, tool in sorted(self.tools.items()):
+			for tool in self.tools.get_tools():
 				if ext in tool.target_types_by_ext:
 					result.add(tool.target_types_by_ext[ext])
 		return result
@@ -900,7 +937,7 @@ class Context(object):
 		if len(target_types) != 1:
 			raise Exception('Unable to find unique handler (%s) to generate %s' % (repr(target_types), obj_name))
 		obj_name = os.path.join(self.get_basedir(self.basedir_object_file), obj_name)
-		(obj_name, obj_name_ext) = get_normed_name(obj_name, self.platform.extensions['object'])
+		obj_name = get_normed_name(obj_name, self.platform.extensions['object'])
 		return self.create_target(obj_name, rule = self.find_rule(target_types.pop(), 'object'),
 			input_list = self.get_implicit_input(self.implicit_object_input) + input_list + add_rule_vars(opts = compiler_opts),
 			add_self_to_on_use_inputs = True, **kwargs)
@@ -948,7 +985,7 @@ class Context(object):
 
 	def shared_library(self, lib_name, input_list, **kwargs):
 		lib_name = os.path.join(self.get_basedir(self.basedir_shared_libray), lib_name)
-		(lib_name, ext) = get_normed_name(lib_name, self.platform.extensions['shared'])
+		lib_name = get_normed_name(lib_name, self.platform.extensions['shared'])
 		link_name = lib_name.replace(self.platform.extensions['shared'], '')
 		if lib_name.startswith('lib'):
 			link_name = link_name[3:]
@@ -964,7 +1001,7 @@ class Context(object):
 
 	def static_library(self, lib_name, input_list, **kwargs):
 		lib_name = os.path.join(self.get_basedir(self.basedir_static_library), lib_name)
-		(lib_name, ext) = get_normed_name(lib_name, self.platform.extensions['static'])
+		lib_name = get_normed_name(lib_name, self.platform.extensions['static'])
 		return self.link(lib_name, target_type = 'static',
 			input_list = input_list, add_self_to_on_use_inputs = True,
 			implicit_input_list = self.get_implicit_input(self.implicit_static_library_input), **kwargs)
@@ -1031,9 +1068,9 @@ class ToolHolder(object):
 	def __len__(self):
 		self._update()
 		return len(self._tools)
-	def items(self):
+	def get_tools(self):
 		self._update()
-		return self._tools.items()
+		return list(map(lambda name_tool: name_tool[1], sorted(self._tools.items())))
 
 
 class Toolchain(object):
@@ -1081,7 +1118,6 @@ def generate_build_file(bfn, ofn, mode):
 	exec_globals.update({
 		# globals
 		'default_context': ctx,
-		'default_targets': None,
 		'match': match,
 		'pyrate_version': pyrate_version,
 		'tools': tools,
@@ -1108,24 +1144,24 @@ def generate_build_file(bfn, ofn, mode):
 		'find_rule': default_ctx_call(exec_globals, Context.find_rule),
 	})
 	if mode:
-		exec_globals['build_system'] = 'makefile'
-	else:
-		exec_globals['build_system'] = 'ninja'
+		exec_globals['build_system'] = ['makefile']
 
 	with open(bfn) as bfp:
 		exec(bfp.read(), exec_globals)
+	default_targets = exec_globals.get('default_targets')
 
 	(rules, targets) = registry.write()
-	if exec_globals['build_system'] == 'makefile':
-		writer = MakefileWriter(ofn.replace('build.ninja', 'Makefile'))
-	else:
-		writer = NinjaBuildFileWriter(ofn)
-	list(map(writer.write_rule, rules))
-	list(map(writer.write_target, targets))
-	default_targets = exec_globals['default_targets']
-	if default_targets and not isinstance(default_targets, (tuple, list)):
-		default_targets = [default_targets]
-	writer.set_default(default_targets, Context.targets)
+	for bsys in exec_globals.get('build_system', ['ninja']):
+		bsys = bsys.lower()
+		if bsys == 'makefile':
+			writer = MakefileWriter(ofn.replace('build.ninja', 'Makefile'))
+		elif bsys == 'ninja':
+			writer = NinjaBuildFileWriter(ofn)
+		list(map(writer.write_rule, rules))
+		list(map(writer.write_target, targets))
+		if default_targets and not isinstance(default_targets, (tuple, list)):
+			default_targets = [default_targets]
+		writer.set_default(default_targets, Context.targets)
 
 def main():
 	def parse_arguments():
@@ -1144,7 +1180,7 @@ def main():
 			args = parser.parse_args()
 			return ([args.build_file], args.output[0], args.makefile)
 		except ImportError:
-			import optparse
+			optparse = __import__('optparse')
 			parser = optparse.OptionParser(usage = 'pyrate [options] build_file')
 			parser.add_option('-V', '--version', action='store_true', help = 'display version')
 			parser.add_option('-M', '--makefile', action = 'store_true', help = 'enable makefile mode')
@@ -1155,6 +1191,7 @@ def main():
 				sys.stderr.write(version_info + '\n')
 				sys.exit(os.EX_OK)
 			return (posargs, args.output, args.makefile)
+
 	(bfn_list, ofn, mode) = parse_arguments()
 	if not bfn_list:
 		bfn = 'build.py'

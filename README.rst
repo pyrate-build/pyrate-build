@@ -1,4 +1,4 @@
-| |PyPI Version| |Build Status| |Coverage| |Gitter|
+| |PyPI Version| |Build Status| |Coverage| |Landscape| |Gitter|
 
 pyrate
 ======
@@ -407,7 +407,7 @@ The following toolchains are currently available:
 
 - ``llvm`` - the LLVM Compiler Infrastructure
   This toolchain will activate the ``clang`` C compiler and the ``clang++`` C++ compiler.
-  Linking will be done with ``link-llvm`` package.
+  Linking will be done with the ``link-llvm`` package.
 
   * ``version`` - requested version
   * ``c_std``, ``c_opts`` - control the std and flags of the ``clang`` external
@@ -480,3 +480,7 @@ Changelog
 .. |Gitter| image:: https://badges.gitter.im/pyrate-build/pyrate-build.svg
    :alt: Join the chat at https://gitter.im/pyrate-build/pyrate-build
    :target: https://gitter.im/pyrate-build/pyrate-build?utm_source=badge&utm_medium=badge&utm_campaign=pr-badge&utm_content=badge
+
+.. |Landscape| image:: https://landscape.io/github/pyrate-build/pyrate-build/master/landscape.svg?style=flat
+   :target: https://landscape.io/github/pyrate-build/pyrate-build/master
+   :alt: Code Health
