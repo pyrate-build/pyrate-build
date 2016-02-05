@@ -26,6 +26,8 @@ build file, build and execute a small executable:
     ninja
     ./test
 
+More examples can be found in the `github`_ repository.
+
 Installation
 ------------
 

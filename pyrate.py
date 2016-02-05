@@ -13,7 +13,7 @@
 #-#  See the License for the specific language governing permissions and
 #-#  limitations under the License.
 
-__version__ = '0.2.2'
+__version__ = '0.2.3'
 
 import os, sys
 try:
@@ -346,6 +346,7 @@ class External(BuildSource):
 	def __init__(self, ctx, on_use_variables = None, rules = None, target_types_by_ext = None,
 			required_inputs_by_target_type = None):
 		assert(ctx)
+		self.name = self.__class__.name
 		BuildSource.__init__(self, on_use_variables = on_use_variables)
 		self.rules = none_to_obj(rules, [])
 		self.target_types_by_ext = none_to_obj(target_types_by_ext, {})
@@ -357,6 +358,12 @@ class External(BuildSource):
 			raise VersionError('Unable to find correct version!')
 
 External.available = {}
+
+
+def register_external(ext, *names):
+	ext.name = names[0]
+	for name in names:
+		External.available[name] = ext
 
 
 class External_linker(External):
@@ -394,7 +401,7 @@ class External_link_base(External_linker):
 			link_shared_def = 'ld', link_shared_opts_def = '-shared -fPIC',
 			link_exe = link_exe, link_exe_opts = link_exe_opts,
 			link_exe_def = 'ld', link_exe_opts_def = '')
-External.available['link-base'] = External_link_base
+register_external(External_link_base, 'link-base')
 
 
 class External_link_gcc(External_linker):
@@ -408,7 +415,7 @@ class External_link_gcc(External_linker):
 			link_shared_def = 'gcc', link_shared_opts_def = '-shared -fPIC',
 			link_exe = link_exe, link_exe_opts = link_exe_opts,
 			link_exe_def = 'gcc', link_exe_opts_def = '')
-External.available['link-gcc'] = External_link_gcc
+register_external(External_link_gcc, 'link-gcc')
 
 
 class External_link_llvm(External_linker):
@@ -422,7 +429,7 @@ class External_link_llvm(External_linker):
 			link_shared_def = 'clang', link_shared_opts_def = '-shared -fPIC',
 			link_exe = link_exe, link_exe_opts = link_exe_opts,
 			link_exe_def = 'clang', link_exe_opts_def = '')
-External.available['link-llvm'] = External_link_llvm
+register_external(External_link_llvm, 'link-llvm')
 
 
 class External_SimpleCompiler(External): # C family compiler
@@ -486,7 +493,7 @@ class External_gcc(External_SimpleCompiler):
 		self._check_version(version, run_process([compiler, '--version'])[0].splitlines()[0].split()[-1])
 		External_SimpleCompiler.__init__(self, ctx, std = std, lang = 'compile_c',
 			compiler = compiler, compiler_opts = compiler_opts, var_prefix = 'CC', ext_list = ext_list)
-External.available['gcc'] = External_gcc
+register_external(External_gcc, 'gcc')
 
 
 class External_gpp(External_SimpleCompiler):
@@ -508,8 +515,7 @@ class External_gpp(External_SimpleCompiler):
 			(ver < '4.8', 'c++11'),
 			(ver < '5.0', 'c++14')],
 			'c++1z')
-External.available['g++'] = External_gpp
-External.available['gpp'] = External_gpp
+register_external(External_gpp, 'g++', 'gpp')
 
 
 class External_gfortran(External_SimpleCompiler):
@@ -520,7 +526,7 @@ class External_gfortran(External_SimpleCompiler):
 		self._check_version(version, run_process([compiler, '--version'])[0].splitlines()[0].split()[-1])
 		External_SimpleCompiler.__init__(self, ctx, std = std, lang = 'fortran',
 			compiler = compiler, compiler_opts = compiler_opts, var_prefix = 'F', ext_list = ext_list)
-External.available['gfortran'] = External_gfortran
+register_external(External_gfortran, 'gfortran')
 
 
 class External_clang(External_SimpleCompiler):
@@ -531,7 +537,7 @@ class External_clang(External_SimpleCompiler):
 		self._check_version(version, run_process([compiler, '--version'])[0].splitlines()[0].split()[2])
 		External_SimpleCompiler.__init__(self, ctx, std = std, lang = 'compile_c',
 			compiler = compiler, compiler_opts = compiler_opts, var_prefix = 'CC', ext_list = ext_list)
-External.available['clang'] = External_clang
+register_external(External_clang, 'clang')
 
 
 class External_clangpp(External_SimpleCompiler):
@@ -551,8 +557,7 @@ class External_clangpp(External_SimpleCompiler):
 			(ver >= '3.5', 'c++1z'),
 			(ver < '3.4', 'c++14'),
 			(ver < '3.3', 'c++11')])
-External.available['clang++'] = External_clangpp
-External.available['clangpp'] = External_clangpp
+register_external(External_clangpp, 'clang++', 'clangpp')
 
 
 class External_SWIG(External):
@@ -578,7 +583,7 @@ class External_SWIG(External):
 			on_use_inputs = {None: [SelfReference()]},
 			on_use_variables = wrapper_ext.on_use_variables)
 		return context.shared_library('_' + name, [wrapper_src, wrapper_ext] + none_to_obj(libs, []), **kwargs)
-External.available['swig'] = External_SWIG
+register_external(External_SWIG, 'swig')
 
 
 class SimpleExternal(External):
@@ -601,21 +606,19 @@ class SimpleExternal(External):
 class External_pthread(SimpleExternal):
 	def __init__(self, ctx):
 		SimpleExternal.__init__(self, ctx, link = '-pthread', compile_cpp = '-pthread')
-External.available['pthread'] = External_pthread
+register_external(External_pthread, 'pthread')
 
 
 class External_libstdcpp(SimpleExternal):
 	def __init__(self, ctx):
 		SimpleExternal.__init__(self, ctx, link_shared = '-lstdc++', link_exe = '-lstdc++')
-External.available['libstdc++'] = External_libstdcpp
-External.available['libstdcpp'] = External_libstdcpp
+register_external(External_libstdcpp, 'libstdc++', 'libstdcpp')
 
 
 class External_libcpp(SimpleExternal):
 	def __init__(self, ctx):
 		SimpleExternal.__init__(self, ctx, link_shared = '-lc++', link_exe = '-lc++')
-External.available['libc++'] = External_libcpp
-External.available['libcpp'] = External_libcpp
+register_external(External_libcpp, 'libc++', 'libcpp')
 
 
 class External_Python(SimpleExternal):
@@ -625,7 +628,7 @@ class External_Python(SimpleExternal):
 		self._check_version(version, python_lib.pop().replace('-lpython', ''))
 		SimpleExternal.__init__(self, ctx, link = link_opts,
 			compile_cpp = run_process([build_helper, '--cflags'])[0])
-External.available['python'] = External_Python
+register_external(External_Python, 'python')
 
 
 def create_build_helper_external(name, build_helper, **kwargs):
@@ -648,7 +651,7 @@ def create_build_helper_external(name, build_helper, **kwargs):
 					kwargs[rule_name] = run_process([build_helper] + kwargs[rule_name].split())[0]
 				SimpleExternal.__init__(self, ctx, **kwargs)
 	TempExternal.__name__ = 'External_' + name.replace('-', '_')
-	External.available[name] = TempExternal
+	register_external(TempExternal, name)
 	return TempExternal
 
 
