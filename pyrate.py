@@ -135,8 +135,16 @@ class Delayed(object):
 		return 'Delayed(%s(*%s, **%s))' % (self._cls, self._args, self._kwargs)
 
 
-class NinjaBuildFileWriter(object):
-	def __init__(self, fn = 'build.ninja'):
+class BuildOutput(object):
+	def __init__(self, fn):
+		pass
+BuildOutput.available = {}
+
+
+class NinjaBuildFileWriter(BuildOutput):
+	def __init__(self, fn = None):
+		if fn is None:
+			fn = 'build.ninja'
 		self._fp = open(fn, 'w')
 		self._vars = {}
 	def set_var(self, key, value):
@@ -164,10 +172,13 @@ class NinjaBuildFileWriter(object):
 		self._fp.write('\n')
 		for key_value in sorted(target.get_build_variables().items()):
 			self._fp.write('  %s = %s\n' % key_value)
+BuildOutput.available['ninja'] = NinjaBuildFileWriter
 
 
-class MakefileWriter(object):
-	def __init__(self, fn = 'build.make'):
+class MakefileWriter(BuildOutput):
+	def __init__(self, fn = None):
+		if fn is None:
+			fn = 'Makefile'
 		self._fp = open(fn, 'w')
 		self._vars = set()
 	def set_var(self, key, value):
@@ -207,6 +218,17 @@ class MakefileWriter(object):
 			opt_hash = calc_hash([opt, variables[opt]])
 			cmd = replace_var_ref(cmd, opt, opt + '_' + opt_hash)
 		self._fp.write('\t%s\n\n' % cmd)
+BuildOutput.available['makefile'] = MakefileWriter
+
+
+def process_build_output(name, targets, rules, default_targets, ofn = None):
+	name = name.lower()
+	writer = BuildOutput.available[name](ofn)
+	list(map(writer.write_rule, rules))
+	list(map(writer.write_target, targets))
+	if default_targets and not isinstance(default_targets, (tuple, list)):
+		default_targets = [default_targets]
+	writer.set_default(default_targets, Context.targets)
 
 
 class SelfReference(object):
@@ -1147,24 +1169,19 @@ def generate_build_file(bfn, ofn, mode):
 		'find_rule': default_ctx_call(exec_globals, Context.find_rule),
 	})
 	if mode:
-		exec_globals['build_system'] = ['makefile']
+		exec_globals['build_output'] = ['makefile']
 
 	with open(bfn) as bfp:
 		exec(bfp.read(), exec_globals)
 	default_targets = exec_globals.get('default_targets')
 
 	(rules, targets) = registry.write()
-	for bsys in exec_globals.get('build_system', ['ninja']):
-		bsys = bsys.lower()
-		if bsys == 'makefile':
-			writer = MakefileWriter(ofn.replace('build.ninja', 'Makefile'))
-		elif bsys == 'ninja':
-			writer = NinjaBuildFileWriter(ofn)
-		list(map(writer.write_rule, rules))
-		list(map(writer.write_target, targets))
-		if default_targets and not isinstance(default_targets, (tuple, list)):
-			default_targets = [default_targets]
-		writer.set_default(default_targets, Context.targets)
+	bsys_list = exec_globals.get('build_output', ['ninja'])
+	for bsys in bsys_list:
+		if len(bsys_list) > 1:
+			ofn = os.path.splitext(ofn)[0] + '.' + bsys
+		process_build_output(bsys, targets, rules, default_targets, ofn)
+
 
 def main():
 	def parse_arguments():
