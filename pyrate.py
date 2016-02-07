@@ -13,7 +13,7 @@
 #-#  See the License for the specific language governing permissions and
 #-#  limitations under the License.
 
-__version__ = '0.2.4'
+__version__ = '0.2.5'
 
 import os, sys
 try:
@@ -123,9 +123,9 @@ def match(value, dn, recurse):
 		walk_entries = os.walk(dn)
 	else:
 		walk_entries = [(dn, [], os.listdir(dn))]
-	for (root, dirs, files) in walk_entries:
-		for fn in files:
-			fn = os.path.relpath(os.path.join(root, fn), dn)
+	for walk_result in walk_entries:
+		for fn in walk_result[2]:
+			fn = os.path.relpath(os.path.join(walk_result[0], fn), dn)
 			accept = False
 			for token in value.split():
 				negate = token.startswith('-')

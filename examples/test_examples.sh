@@ -114,3 +114,4 @@ if [ -n "$(which coverage 2> /dev/null)" ]; then
 fi
 
 rm -f *.o *.d
+echo "============"
