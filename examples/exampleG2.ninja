@@ -8,7 +8,7 @@ rule compile_cpp
 
 rule install
   command = cp $in $out
-  description = installing $out
+  description = installing executable $out
 
 LINKER_EXE = gcc
 LINKER_EXE_FLAGS = 

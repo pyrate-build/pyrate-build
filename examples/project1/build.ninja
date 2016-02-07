@@ -1,0 +1,37 @@
+CXX = g++
+CXX_FLAGS = -Wall -pedantic
+rule compile_cpp
+  command = $CXX $CXX_FLAGS ${opts} -MMD -MT $out -MF $out.d -c $in -o $out
+  description = compile(cpp) $out
+  depfile = $out.d
+  deps = gcc
+
+rule install
+  command = cp $in $out
+  description = installing executable $out
+
+rule install_lib
+  command = cp $in $out
+  description = installing static library $out
+
+LINKER_EXE = gcc
+LINKER_EXE_FLAGS = 
+rule link_exe
+  command = $LINKER_EXE $LINKER_EXE_FLAGS ${opts} -o $out $in
+  description = link(exe) $out
+
+LINKER_STATIC = gcc-ar
+LINKER_STATIC_FLAGS = rcs
+rule link_static
+  command = rm -f $out && $LINKER_STATIC $LINKER_STATIC_FLAGS ${opts} $out $in
+  description = link(static) $out
+
+build build/foo/foo.o: compile_cpp foo/foo.cpp
+build build/foo/libfoo.a: link_static build/foo/foo.o
+build /usr/lib/libfoo.a: install_lib build/foo/libfoo.a
+build build/test.o: compile_cpp test.cpp
+build build/example02.bin: link_exe build/test.o build/foo/libfoo.a
+  opts = -lstdc++
+build /usr/bin/example02.bin: install build/example02.bin
+build install: phony /usr/lib/libfoo.a /usr/bin/example02.bin
+build all: phony build/foo/libfoo.a build/example02.bin

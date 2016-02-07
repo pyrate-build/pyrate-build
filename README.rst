@@ -106,10 +106,10 @@ In general, a build input list that can be used to construct a build target take
 
 Each item can be one of the following:
 
--  a *string* is interpreted as a file name that is processed according to the rules specified by the packages in the ``tool`` dictionary
--  a *build target* as returned by the functions described in `Defining build targets`_ or explicitly defined
--  an *external dependency* as returned by the functions described in `External dependencies`_ or explicitly defined
--  or any other kind of ``BuildSource`` (explained later)
+- a *string* is interpreted as a file name that is processed according to the rules specified by the packages in the ``tool`` dictionary
+- a *build target* as returned by the functions described in `Defining build targets`_ or explicitly defined
+- an *external dependency* as returned by the functions described in `External dependencies`_ or explicitly defined
+- or any other kind of ``BuildSource`` (explained later)
 
 Instead of a list, it is also possible to specify a space separated string of file names.
 Such a string is automatically split, so the following two build input lists behave identically:
@@ -121,7 +121,7 @@ Besides specifying file names by hand, there are many ways to get a list of file
 Common methods include calling the python function ``os.listdir`` or using the helper
 function ``match`` provided by **pyrate**:
 
--  ``match(selector, dir_name = '.', recurse = False)``
+- ``match(selector, dir_name = '.', recurse = False)``
 
 This functions allows to select files from a directory using a string consisting
 of black / white listing path name patterns.
@@ -135,10 +135,10 @@ Defining build targets
 There are four global helper functions to define object files, executables and libraries based
 on a list of build inputs (which can be files, other targets or externals - as shown in `Specifying build input`_):
 
--  ``executable(name, input_list, compiler_opts = None, linker_opts = None)``
--  ``shared_library(name, input_list, compiler_opts = None, linker_opts = None)``
--  ``static_library(name, input_list, compiler_opts = None, linker_opts = None)``
--  ``object_file(name, input_list, compiler_opts = None)``
+- ``executable(name, input_list, compiler_opts = None, linker_opts = None)``
+- ``shared_library(name, input_list, compiler_opts = None, linker_opts = None)``
+- ``static_library(name, input_list, compiler_opts = None, linker_opts = None)``
+- ``object_file(name, input_list, compiler_opts = None)``
 
 Each function returns a build target object, that can be used as input / dependency of another function.
 If multiple executables / libraries or object files with the same name but different inputs / options
@@ -152,7 +152,7 @@ within the default build context.
 By default, all build targets that are defined by the above functions (or direct API calls) are built.
 In order to select only certain default targets, the global variable ``default_targets`` can be used:
 
--  ``default_targets = [<target>,...]`` (list of targets), ``<target>`` (single target) or ``None`` (all targets are built)
+- ``default_targets = [<target>,...]`` (list of targets), ``<target>`` (single target) or ``None`` (all targets are built)
 
 External dependencies
 ~~~~~~~~~~~~~~~~~~~~~
@@ -160,8 +160,8 @@ External dependencies
 The build environment / dependencies on external packages can be expressed using the
 following functions / variables:
 
--  ``find_external(name, ...)``
--  ``use_external(name, ...)``
+- ``find_external(name, ...)``
+- ``use_external(name, ...)``
 
 The function ``find_external`` searches for some external dependency (built-in, pkg-config package
 or self-defined) with the given name and returns either None or a representation of the dependency.
@@ -170,7 +170,7 @@ of the context if it exists.
 The function takes additional positional and keyword arguments that depend on the external package.
 A common argument for this function is a version selector, that is supplied through a global variable:
 
--  ``version``
+- ``version``
 
 The comparison between this variable and a version specifier (eg. ``version >= 4.1``)
 will return a function that can be used to check the expression and is used by the external package finder.
@@ -186,7 +186,7 @@ A list of the builtin packages is presented in `Externals`_.
 In order to simplify the creation of external packages that already provide a build configuration tool
 to query version, linker or compiler options, **pyrate** provides the function:
 
--  ``create_external(name, build_helper, ...)``
+- ``create_external(name, build_helper, ...)``
 
 It requires the user to define a name for the external package and to supply the build configuration tool.
 The values of additional parameters are interpreted as command line options for the build configuration tool.
@@ -194,15 +194,15 @@ The name of these additional parameters specify the name of the
 rule that gets supplied with the flags given by the output of the build configuration tool.
 However there are four parameters that have a special meaning:
 
--  ``version_query`` - similar to the other parameters, the value of this parameter is used as build
-   configuration tool option to determine the current version of the external package.
-   As a consequence of providing this option, the resulting external package will support the parameter ``version``.
--  ``version_parser`` - this parameter allows to supply a function that parses the version string
-   provided by the build configuration tool and is only used if ``version_query`` is given.
--  ``version`` - specifies required version (eg. ``version = version >= 11.5``) and can only be used if
-   ``version_query`` is given
--  ``link = opts`` is equivalent to specifying ``link_shared = opts``, ``link_static = opts`` and
-   ``link_exe = opts``
+- ``version_query`` - similar to the other parameters, the value of this parameter is used as build
+  configuration tool option to determine the current version of the external package.
+  As a consequence of providing this option, the resulting external package will support the parameter ``version``.
+- ``version_parser`` - this parameter allows to supply a function that parses the version string
+  provided by the build configuration tool and is only used if ``version_query`` is given.
+- ``version`` - specifies required version (eg. ``version = version >= 11.5``) and can only be used if
+  ``version_query`` is given
+- ``link = opts`` is equivalent to specifying ``link_shared = opts``, ``link_static = opts`` and
+  ``link_exe = opts``
 
 The following example recreates the builtin external package for wxWidgets and returns a representation
 of the external package if a matching version is found:
@@ -218,7 +218,7 @@ Configuration of the build environment
 
 It is possible to query the current version of **pyrate** via the variable:
 
--  ``pyrate_version``
+- ``pyrate_version``
 
 this allows to ensure a compatible version of **pyrate** with something along the lines of:
 
@@ -227,48 +227,48 @@ this allows to ensure a compatible version of **pyrate** with something along th
     assert(pyrate_version > '0.1.8')
 
 A build context allows for example to define implicit dependencies that are automatically
-included in all generated object files, executables or libraries (via ``implicit_input_*`` options).
-It is also possible to set base directories for the output generated by the build (via ``basedir_*`` options).
+included in all generated object files, executables or libraries (via ``implicit_*`` options).
+It is also possible to set base directories for the output generated by the build (via ``basepath_*`` options).
 
 The default context used by the global functions presented in `Defining build targets`_
 can be set or accessed using the variable:
 
--  ``default_context = Context(...)``
+- ``default_context = Context(...)``
 
 An instance of such a build context is created with:
 
--  ``Context(...)`` - the most important parameters are:
+- ``Context(...)`` - the most important parameters are:
 
-   * ``implicit_input``, ``implicit_object_input``, ``implicit_static_library_input``,
-     ``implicit_shared_library_input`` and ``implicit_executable_input``
-   * ``basedir``, ``basedir_object_file``, ``basedir_static_library``, ``basedir_shared_libray``,
-     ``basedir_executable``
+  * ``implicit_input``, ``implicit_object_input``, ``implicit_static_library_input``,
+    ``implicit_shared_library_input`` and ``implicit_executable_input``
+  * ``basepath``, ``basepath_object_file``, ``basepath_static_library``, ``basepath_shared_libray``,
+    ``basepath_executable``
 
 These parameters can also be changed on an existing context instance:
 
 .. code:: python
 
-    default_context.basedir = 'build'
+    default_context.basepath = 'build'
 
 A context also allows to access some additional settings - which are described in
 more detail below. These settings are available as member functions of a context or
 as global variables (that are provided by the default_context):
 
--  ``tools``
-   This is a dictionary that contains links to external packages that provide the basic rules
-   and parameters that are used to process sources and generate targets.
-   This dictionary can be modified, but should not be overwritten.
+- ``tools``
+  This is a dictionary that contains links to external packages that provide the basic rules
+  and parameters that are used to process sources and generate targets.
+  This dictionary can be modified, but should not be overwritten.
 
--  ``toolchain``
-   This is a list of ``Toolchain`` instances that is used to populate the tools dictionary
-   in reverse order. There are currently two toolchains available: ``gcc`` and ``llvm``
-   They can be accessed with the follwing two methods:
+- ``toolchain``
+  This is a list of ``Toolchain`` instances that is used to populate the tools dictionary
+  in reverse order. There are currently two toolchains available: ``gcc`` and ``llvm``
+  They can be accessed with the follwing two methods:
 
--  ``find_toolchain(name, ...)``
--  ``use_toolchain(name, ...)``
-   These methods work in the same way as the ``find_external`` and ``use_external`` methods.
-   The available toolchains and their options are presented in `Toolchains`_.
-   The following example would try to set the clang / clang++ compiler and llvm linker in the tool dictionary
+- ``find_toolchain(name, ...)``
+- ``use_toolchain(name, ...)``
+  These methods work in the same way as the ``find_external`` and ``use_external`` methods.
+  The available toolchains and their options are presented in `Toolchains`_.
+  The following example would try to set the clang / clang++ compiler and llvm linker in the tool dictionary
 
 .. code:: python
 
@@ -335,12 +335,32 @@ Examples for different build sources are:
   forwards the specified file name to any rules (using ``on_use_inputs``)
 - ``Externals`` - are a type of ``BuildSource`` that specify ``on_use_variables`` among other things
 
-Installation
-~~~~~~~~~~~~
+Installing Targets
+~~~~~~~~~~~~~~~~~~
 
--  ``install(target_list)``
-   This function will create install targets in the build file to install the given target / list of targets.
-   In particular an *install* target will be created that will contain all generated install targets.
+- ``install(target_list)``
+  This function will create install targets in the build file to install the given target / list of targets.
+  In particular an *install* target will be created that will contain all generated install targets.
+
+Subdirectories
+~~~~~~~~~~~~~~
+
+- ``include(build_file_list, inherit = False)``
+  This function will read in the given build config file(s). If a directory is given
+  instead of a build config file, **pyrate** will enter the given directory and use the file ``build.py``
+  if available. The parameter ``inherit`` allows to inherit ``basepath_*`` and ``implicit_*`` settings
+  from the current context.
+  *Current implementation notice - the targets from the included file will be
+  adapted for proper paths and included in the build output of the main file. The goal is to allow
+  very loose coupling between the main project and the subsystem projects so each subsystem can
+  be independently processed without any changes.*
+
+- ``find_internal(name)``
+  This function allows to retrieve build targets that were created by ``executable``, ``shared_library``,
+  ``static_library`` and ``object_file``. It will match against the user specified name, the installation
+  name (with platform specific extensions) and the build target name
+  (derived from the specified ``basepath`` and ``basepath_...`` and the installation name).
+  This is in particular useful when trying to specify dependencies one objects included from another file.
 
 Externals
 ---------

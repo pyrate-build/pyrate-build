@@ -25,6 +25,18 @@ run_test() {
 	echo "TEST OK"
 }
 
+run_project() {
+	echo $EXAMPLE
+	EXAMPLE_NINJA="${EXAMPLE/.py/.ninja}"
+	mv $EXAMPLE_NINJA $EXAMPLE_NINJA.ref
+	$EXEC $EXAMPLE
+	mv $EXAMPLE_NINJA $EXAMPLE_NINJA.test
+	mv $EXAMPLE_NINJA.ref $EXAMPLE_NINJA
+	diff -u $EXAMPLE_NINJA $EXAMPLE_NINJA.test
+	rm $EXAMPLE_NINJA.test
+	echo "TEST OK"
+}
+
 run_test_make() {
 	echo $EXAMPLE
 	EXAMPLE_MAKE="${EXAMPLE/.py/.make}"
@@ -63,6 +75,10 @@ done
 
 for EXAMPLE in exampleG1.py exampleG2.py; do
 	run_test_general $EXAMPLE
+done
+
+for EXAMPLE in project1/build.py project1/foo/build.py; do
+	run_project $EXAMPLE
 done
 
 cp example01.py build.py
