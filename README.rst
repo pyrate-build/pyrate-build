@@ -335,6 +335,13 @@ Examples for different build sources are:
   forwards the specified file name to any rules (using ``on_use_inputs``)
 - ``Externals`` - are a type of ``BuildSource`` that specify ``on_use_variables`` among other things
 
+Installation
+~~~~~~~~~~~~
+
+-  ``install(target_list)``
+   This function will create install targets in the build file to install the given target / list of targets.
+   In particular an *install* target will be created that will contain all generated install targets.
+
 Externals
 ---------
 
