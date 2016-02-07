@@ -1,3 +1,3 @@
-%PYTHON% pyrate example01.py
-%PYTHON% pyrate example02.py
-%PYTHON% pyrate example03.py
+%PYTHON%\python pyrate examples\example01.py
+%PYTHON%\python pyrate examples\example02.py
+%PYTHON%\python pyrate examples\example03.py

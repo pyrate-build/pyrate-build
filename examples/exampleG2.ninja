@@ -1,0 +1,25 @@
+CXX = g++
+CXX_FLAGS = -Wall -pedantic
+rule compile_cpp
+  command = $CXX $CXX_FLAGS ${opts} -MMD -MT $out -MF $out.d -c $in -o $out
+  description = compile(cpp) $out
+  depfile = $out.d
+  deps = gcc
+
+rule install
+  command = cp $in $out
+  description = installing $out
+
+LINKER_EXE = gcc
+LINKER_EXE_FLAGS = 
+rule link_exe
+  command = $LINKER_EXE $LINKER_EXE_FLAGS ${opts} -o $out $in
+  description = link(exe) $out
+
+build test.o: compile_cpp test.cpp
+build foo.o: compile_cpp foo.cpp
+build example11.bin: link_exe test.o foo.o
+  opts = -lstdc++
+build /usr/bin/example11.bin: install example11.bin
+build install: phony /usr/bin/example11.bin
+build all: phony example11.bin

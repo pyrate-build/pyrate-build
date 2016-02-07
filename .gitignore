@@ -6,10 +6,8 @@ build.py
 dist
 *.egg-info
 examples/examples
-Makefile
 mylib*
 .ninja_*
-*.ninja
 *.o
 py_*
 *.pyc

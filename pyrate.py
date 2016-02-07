@@ -17,6 +17,8 @@ __version__ = '0.2.3'
 
 import os, sys
 try:
+	if os.environ.get('TESTOLDIMPORTS'):
+		raise ImportError()
 	import hashlib
 	def calc_hash(value):
 		return hashlib.md5(repr(value).encode('ascii')).hexdigest()
@@ -28,6 +30,12 @@ def none_to_obj(value, obj):
 	if value is None:
 		return obj
 	return value
+
+def ensure_list(value):
+	if isinstance(value, (list, tuple)):
+		return list(value)
+	elif value:
+		return [value]
 
 class ProcessError(Exception):
 	pass
@@ -152,7 +160,9 @@ class NinjaBuildFileWriter(BuildOutput):
 		if self._vars.get(key) != value:
 			self._fp.write('%s = %s\n' % (key, value.strip()))
 		self._vars[key] = value
-	def write_default(self, target_list, target_list_all):
+	def write_default(self, target_list, target_list_all, target_list_install):
+		if target_list_install:
+			self._fp.write('build install: phony %s\n' % str.join(' ', map(lambda t: t.name, target_list_install)))
 		self._fp.write('build all: phony %s\n' % str.join(' ', map(lambda t: t.name, target_list_all)))
 		if target_list is not None:
 			self._fp.write('default %s\n' % str.join(' ', map(lambda t: t.name, target_list)))
@@ -182,8 +192,10 @@ class MakefileWriter(BuildOutput):
 		self._vars = set()
 	def _write_var(self, key, value):
 		self._fp.write('%s := %s\n' % (key, value.strip()))
-	def write_default(self, target_list, target_list_all):
+	def write_default(self, target_list, target_list_all, target_list_install):
 		self._fp.write('all: %s\n' % str.join(' ', map(lambda t: t.name, target_list_all)))
+		if target_list_install:
+			self._fp.write('install: %s\n' % str.join(' ', map(lambda t: t.name, target_list_install)))
 		default = 'all'
 		if target_list is not None:
 			self._fp.write('default: %s\n' % str.join(' ', map(lambda t: t.name, target_list)))
@@ -227,9 +239,7 @@ def process_build_output(name, targets, rules, default_targets, ofn = None):
 	writer = BuildOutput.available[name](ofn)
 	list(map(writer.write_rule, rules))
 	list(map(writer.write_target, targets))
-	if default_targets and not isinstance(default_targets, (tuple, list)):
-		default_targets = [default_targets]
-	writer.write_default(default_targets, Context.targets)
+	writer.write_default(ensure_list(default_targets), Context.targets, Context.install_targets)
 
 
 class SelfReference(object):
@@ -288,10 +298,11 @@ class BuildSource(object):
 
 class BuildTarget(BuildSource):
 	def __init__(self, name, build_rule, build_src,
-			on_use_inputs = None, on_use_deps = None, on_use_variables = None, no_rename = False):
+			on_use_inputs = None, on_use_deps = None, on_use_variables = None,
+			target_type = None, no_rename = False, user_name = None):
 		BuildSource.__init__(self, on_use_inputs, on_use_deps, on_use_variables)
 		(self.name, self.build_rule, self.build_src) = (name, build_rule, build_src)
-		self.no_rename = no_rename
+		(self.target_type, self.no_rename, self.user_name) = (target_type, no_rename, user_name)
 		self._drop_opt = False
 
 	def get_hash(self):
@@ -356,10 +367,7 @@ def add_rule_vars(**kwargs):
 	variables = {}
 	for key, value in kwargs.items():
 		if value:
-			if isinstance(value, list):
-				variables.setdefault(key, []).extend(value)
-			else:
-				variables.setdefault(key, []).append(value)
+			variables.setdefault(key, []).extend(ensure_list(value))
 	if variables:
 		return [RuleVariables(on_use_variables = {None: variables})]
 	return []
@@ -604,25 +612,21 @@ class External_SWIG(External):
 		wrapper_src = BuildTarget(get_normed_name(name, '.cpp'), swig_rule,
 			[InputFile(ifile)] + add_rule_vars(opts = swig_opts, module_name = name),
 			on_use_inputs = {None: [SelfReference()]},
-			on_use_variables = wrapper_ext.on_use_variables)
+			on_use_variables = wrapper_ext.on_use_variables, target_type = 'cpp')
 		return context.shared_library('_' + name, [wrapper_src, wrapper_ext] + none_to_obj(libs, []), **kwargs)
 register_external(External_SWIG, 'swig')
 
 
 class SimpleExternal(External):
 	def __init__(self, ctx, **kwargs):
-		link_opts = kwargs.pop('link', [])
-		if not isinstance(link_opts, list):
-			link_opts = [link_opts]
+		link_opts = ensure_list(kwargs.pop('link', []))
 		if link_opts:
 			kwargs['link_static'] = link_opts
 			kwargs['link_shared'] = link_opts
 			kwargs['link_exe'] = link_opts
 		on_use_variables = {}
 		for rule_name, opts in kwargs.items():
-			if not isinstance(opts, list):
-				opts = [opts]
-			on_use_variables.setdefault(rule_name, {})['opts'] = opts
+			on_use_variables.setdefault(rule_name, {})['opts'] = ensure_list(opts)
 		External.__init__(self, ctx, on_use_variables = on_use_variables)
 
 
@@ -840,6 +844,12 @@ class Platform(object):
 	def __init__(self):
 		self.name = 'linux'
 		self.extensions = {'object': '.o', 'shared': '.so', 'static': '.a', 'exe': ''}
+		self.install_paths = {'shared': '/usr/lib', 'static': '/usr/lib', 'exe': '/usr/bin'}
+		self.rules = [
+			Rule(('exe', 'install'), 'install', 'cp $in $out', 'installing $out', {}),
+			Rule(('shared', 'install'), 'install_lib', 'cp $in $out', 'installing $out', {}),
+			Rule(('static', 'install'), 'install_lib', 'cp $in $out', 'installing $out', {}),
+		]
 
 	def get_required_inputs(self, target_type, toolholder):
 		result = []
@@ -861,6 +871,7 @@ def force_build_source(input_list):
 
 class Context(object):
 	targets = []
+	install_targets = []
 
 	def __init__(self, registry, platform, tools,
 			implicit_input = None,
@@ -932,14 +943,22 @@ class Context(object):
 		return self.find_external(name, *args, **kwargs_external)
 
 	def find_rule(self, ttfrom, ttto): # return a new instance going from target type (from -> to)
+		def clone_rule(r):
+			return Rule(r.connection, r.name, r.cmd, r.desc, r.defaults, **dict(r.params))
 		for tool in self.tools.get_tools():
-			for r in tool.rules:
-				if r.connection == (ttfrom, ttto):
-					return Rule(r.connection, r.name, r.cmd, r.desc, r.defaults, **dict(r.params))
+			for rule in tool.rules:
+				if rule.connection == (ttfrom, ttto):
+					return clone_rule(rule)
+		for rule in self.platform.rules:
+			if rule.connection == (ttfrom, ttto):
+				return clone_rule(rule)
 		raise Exception('build rule translating %s -> %s not found!' % (ttfrom, ttto))
 
 	def find_target_types(self, obj):
 		result = set()
+		if hasattr(obj, 'target_type'):
+			if obj.target_type:
+				result.add(obj.target_type)
 		if hasattr(obj, 'name'):
 			ext = os.path.splitext(obj.name)[1].lower()
 			for tool in self.tools.get_tools():
@@ -947,7 +966,7 @@ class Context(object):
 					result.add(tool.target_types_by_ext[ext])
 		return result
 
-	def create_target(self, target_name, rule, input_list, add_self_to_on_use_inputs, **kwargs):
+	def create_target(self, target_name, rule, input_list, add_self_to_on_use_inputs = False, **kwargs):
 		on_use_inputs = kwargs.pop('on_use_inputs', {})
 		if add_self_to_on_use_inputs:
 			on_use_inputs.setdefault(None, []).append(SelfReference())
@@ -957,16 +976,16 @@ class Context(object):
 	def object_file(self, obj_name, input_list = None, compiler_opts = None, **kwargs):
 		input_list = force_build_source(input_list)
 		# collect rules from the input object extensions
-		target_types = set()
-		for target_types_new in map(self.find_target_types, input_list):
-			target_types.update(target_types_new)
-		if len(target_types) != 1:
-			raise Exception('Unable to find unique handler (%s) to generate %s' % (repr(target_types), obj_name))
-		obj_name = os.path.join(self.get_basedir(self.basedir_object_file), obj_name)
+		source_target_types = set()
+		for source_target_types_new in map(self.find_target_types, input_list):
+			source_target_types.update(source_target_types_new)
+		if len(source_target_types) != 1:
+			raise Exception('Unable to find unique handler (%s) to generate %s' % (repr(source_target_types), obj_name))
 		obj_name = get_normed_name(obj_name, self.platform.extensions['object'])
-		return self.create_target(obj_name, rule = self.find_rule(target_types.pop(), 'object'),
+		build_name = os.path.join(self.get_basedir(self.basedir_object_file), obj_name)
+		return self.create_target(build_name, rule = self.find_rule(source_target_types.pop(), 'object'),
 			input_list = self.get_implicit_input(self.implicit_object_input) + input_list + add_rule_vars(opts = compiler_opts),
-			add_self_to_on_use_inputs = True, **kwargs)
+			add_self_to_on_use_inputs = True, target_type = 'object', user_name = build_name, **kwargs)
 
 	def link(self, output_name, target_type, input_list, implicit_input_list,
 			add_self_to_on_use_inputs, link_mode = 'single', **kwargs):
@@ -976,15 +995,18 @@ class Context(object):
 		link_input = []
 		inputs_by_target_type = {}
 		for obj in input_list:
-			target_types = self.find_target_types(obj)
-			if len(target_types) == 1:
-				inputs_by_target_type.setdefault(target_types.pop(), []).append(obj)
-			elif not target_types: # nothing to compile in any way
-				if not isinstance(obj, BuildTarget):
-					object_input.append(obj)
+			source_target_types = self.find_target_types(obj)
+			if len(source_target_types) == 1:
+				source_target_type = source_target_types.pop()
+				if source_target_type in ['object', 'shared', 'static']:
+					link_input.append(obj)
+				else:
+					inputs_by_target_type.setdefault(source_target_type, []).append(obj)
+			elif not isinstance(obj, BuildTarget):
+				object_input.append(obj)
 				link_input.append(obj)
 			else:
-				raise Exception('Found multiple rules (%s) to generate object from %s' % (repr(target_types), repr(obj)))
+				raise Exception('Unable to process %s (handlers %s)' % (repr(obj), repr(source_target_types)))
 
 		input_list_new = list(self.get_implicit_input(implicit_input_list))
 		input_list_new.extend(add_rule_vars(opts = kwargs.pop('linker_opts', None)))
@@ -1005,40 +1027,52 @@ class Context(object):
 
 		target = self.create_target(output_name, rule = rule,
 			input_list = input_list_new + link_input,
-			add_self_to_on_use_inputs = add_self_to_on_use_inputs, **kwargs)
+			add_self_to_on_use_inputs = add_self_to_on_use_inputs,
+			target_type = target_type, **kwargs)
 		Context.targets.append(target)
 		return target
 
 	def shared_library(self, lib_name, input_list, **kwargs):
-		lib_name = os.path.join(self.get_basedir(self.basedir_shared_libray), lib_name)
 		lib_name = get_normed_name(lib_name, self.platform.extensions['shared'])
-		link_name = lib_name.replace(self.platform.extensions['shared'], '')
-		if lib_name.startswith('lib'):
+		link_name = os.path.basename(lib_name.replace(self.platform.extensions['shared'], ''))
+		if link_name.startswith('lib'):
 			link_name = link_name[3:]
 		on_use_variables = kwargs.pop('on_use_variables', {})
 		on_use_variables.setdefault(None, {}).setdefault('opts', [])
 		on_use_variables[None]['opts'] += ['-L.', '-l%s' % link_name]
 		on_use_deps = kwargs.pop('on_use_deps', {})
 		on_use_deps.setdefault(None, []).append(SelfReference())
-		return self.link(lib_name, target_type = 'shared', 
+		build_name = os.path.join(self.get_basedir(self.basedir_shared_libray), lib_name)
+		return self.link(build_name, target_type = 'shared',
 			input_list = input_list, add_self_to_on_use_inputs = False,
 			implicit_input_list = self.get_implicit_input(self.implicit_shared_library_input),
-			on_use_deps = on_use_deps, on_use_variables = on_use_variables, **kwargs)
+			on_use_deps = on_use_deps, on_use_variables = on_use_variables, user_name = lib_name, **kwargs)
 
 	def static_library(self, lib_name, input_list, **kwargs):
-		lib_name = os.path.join(self.get_basedir(self.basedir_static_library), lib_name)
 		lib_name = get_normed_name(lib_name, self.platform.extensions['static'])
-		return self.link(lib_name, target_type = 'static',
-			input_list = input_list, add_self_to_on_use_inputs = True,
+		build_name = os.path.join(self.get_basedir(self.basedir_static_library), lib_name)
+		return self.link(build_name, target_type = 'static',
+			input_list = input_list, add_self_to_on_use_inputs = True, user_name = lib_name,
 			implicit_input_list = self.get_implicit_input(self.implicit_static_library_input), **kwargs)
 
 	def executable(self, exe_name, input_list, **kwargs):
-		exe_name = os.path.join(self.get_basedir(self.basedir_executable), exe_name)
 		if not exe_name.endswith(self.platform.extensions['exe']):
 			exe_name += self.platform.extensions['exe']
-		return self.link(exe_name, target_type = 'exe',
-			input_list = input_list, add_self_to_on_use_inputs = False,
+		build_name = os.path.join(self.get_basedir(self.basedir_executable), exe_name)
+		return self.link(build_name, target_type = 'exe',
+			input_list = input_list, add_self_to_on_use_inputs = False, user_name = exe_name,
 			implicit_input_list = self.get_implicit_input(self.implicit_executable_input), **kwargs)
+
+	def install(self, target_list):
+		for obj in ensure_list(target_list):
+			obj_target_type = self.find_target_types(obj).pop()
+			install_name = obj.name
+			if obj.user_name:
+				install_name = obj.user_name
+			install_name = os.path.join(self.platform.install_paths[obj_target_type], install_name)
+			rule = self.find_rule(obj_target_type, 'install')
+			target = self.create_target(install_name, rule = rule, input_list = [InputFile(obj.name)])
+			Context.install_targets.append(target)
 
 
 def create_ctx(ctx, **kwargs):
@@ -1073,7 +1107,7 @@ class ToolHolder(object):
 				if toolfactory and not self._tools.get(toolname):
 					try:
 						tool_instance = toolfactory.get_instance()
-					except Exception:
+					except (ProcessError, VersionError):
 						tool_instance = None
 					if tool_instance:
 						self._tools[toolname] = tool_instance
@@ -1154,6 +1188,7 @@ def generate_build_file(bfn, ofn, mode):
 		'executable': default_ctx_call(exec_globals, Context.executable),
 		'find_external': default_ctx_call(exec_globals, Context.find_external),
 		'find_toolchain': default_ctx_call(exec_globals, Context.find_toolchain),
+		'install': default_ctx_call(exec_globals, Context.install),
 		'object_file': default_ctx_call(exec_globals, Context.object_file),
 		'shared_library': default_ctx_call(exec_globals, Context.shared_library),
 		'static_library': default_ctx_call(exec_globals, Context.static_library),
@@ -1179,7 +1214,7 @@ def generate_build_file(bfn, ofn, mode):
 	(rules, targets) = registry.write()
 	bsys_list = exec_globals.get('build_output', ['ninja'])
 	for bsys in bsys_list:
-		if len(bsys_list) > 1:
+		if ofn and (len(bsys_list) > 1):
 			ofn = os.path.splitext(ofn)[0] + '.' + bsys
 		process_build_output(bsys, targets, rules, default_targets, ofn)
 
@@ -1187,7 +1222,7 @@ def generate_build_file(bfn, ofn, mode):
 def main():
 	version_info = 'pyrate version ' + __version__
 	try:
-		if os.environ.get('PYTHONOPTPARSE'):
+		if os.environ.get('TESTOLDIMPORTS'):
 			raise ImportError()
 		import argparse
 		parser = argparse.ArgumentParser()
@@ -1210,7 +1245,7 @@ def main():
 			help = 'name of output build file', dest='output')
 		(args, posargs) = parser.parse_args()
 		if len(posargs) > 1:
-			sys.stderr.write('too many build_file arguments provided! %s\n' % repr(bfn_list))
+			sys.stderr.write('too many build_file arguments provided! %s\n' % repr(posargs))
 			return os.EX_USAGE
 		elif not posargs:
 			posargs = ['build.py']
