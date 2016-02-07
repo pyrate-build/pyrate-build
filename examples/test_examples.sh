@@ -39,13 +39,17 @@ for EXAMPLE in $TESTS; do
 	run_test $EXAMPLE
 done
 
-for EXAMPLE in exampleM1.py; do
+for EXAMPLE in exampleM1.py exampleM2.py; do
 	run_test_make $EXAMPLE
 done
 
 cp example01.py build.py
 $EXEC
+diff -u example01.ninja build.ninja
+
+cp exampleM1.py build.py
 $EXEC -M
+diff -u exampleM1.make Makefile
 
 set +e
 $EXEC example01.py example02.py 2> /dev/null

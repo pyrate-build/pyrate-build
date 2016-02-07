@@ -136,28 +136,29 @@ class Delayed(object):
 
 
 class BuildOutput(object):
-	def __init__(self, fn):
-		pass
+	def __init__(self, fn, default_fn):
+		if fn is None:
+			fn = default_fn
+		self._fn = fn
+		self._fp = open(self._fn, 'w')
 BuildOutput.available = {}
 
 
 class NinjaBuildFileWriter(BuildOutput):
 	def __init__(self, fn = None):
-		if fn is None:
-			fn = 'build.ninja'
-		self._fp = open(fn, 'w')
+		BuildOutput.__init__(self, fn, 'build.ninja')
 		self._vars = {}
-	def set_var(self, key, value):
+	def _write_var(self, key, value):
 		if self._vars.get(key) != value:
 			self._fp.write('%s = %s\n' % (key, value.strip()))
 		self._vars[key] = value
-	def set_default(self, target_list, target_list_all):
+	def write_default(self, target_list, target_list_all):
 		self._fp.write('build all: phony %s\n' % str.join(' ', map(lambda t: t.name, target_list_all)))
 		if target_list is not None:
 			self._fp.write('default %s\n' % str.join(' ', map(lambda t: t.name, target_list)))
 	def write_rule(self, rule):
 		for key, value in sorted(rule.defaults.items()):
-			self.set_var(key, value)
+			self._write_var(key, value)
 		self._fp.write('rule %s\n' % rule.name)
 		self._fp.write('  command = %s\n' % rule.cmd)
 		self._fp.write('  description = %s\n' % rule.desc)
@@ -177,20 +178,20 @@ BuildOutput.available['ninja'] = NinjaBuildFileWriter
 
 class MakefileWriter(BuildOutput):
 	def __init__(self, fn = None):
-		if fn is None:
-			fn = 'Makefile'
-		self._fp = open(fn, 'w')
+		BuildOutput.__init__(self, fn, 'Makefile')
 		self._vars = set()
-	def set_var(self, key, value):
+	def _write_var(self, key, value):
 		self._fp.write('%s := %s\n' % (key, value.strip()))
-	def set_default(self, target_list, target_list_all):
+	def write_default(self, target_list, target_list_all):
 		self._fp.write('all: %s\n' % str.join(' ', map(lambda t: t.name, target_list_all)))
+		default = 'all'
 		if target_list is not None:
 			self._fp.write('default: %s\n' % str.join(' ', map(lambda t: t.name, target_list)))
-		self._fp.write('.DEFAULT_GOAL := default\n')
+			default = 'default'
+		self._fp.write('.DEFAULT_GOAL := %s\n' % default)
 	def write_rule(self, rule):
 		for key, value in sorted(rule.defaults.items()):
-			self.set_var(key, value)
+			self._write_var(key, value)
 		self._fp.write('\n')
 	def write_target(self, target):
 		def replace_var(value, var_name, var_value):
@@ -203,7 +204,7 @@ class MakefileWriter(BuildOutput):
 			opt_hash = calc_hash([opt, opt_value])
 			if opt_hash not in self._vars:
 				self._vars.add(opt_hash)
-				self.set_var(opt + '_' + opt_hash, opt_value)
+				self._write_var(opt + '_' + opt_hash, opt_value)
 		inputs = list(map(lambda t: t.name, target.get_build_inputs()))
 		deps = inputs + list(map(lambda t: t.name, target.get_build_deps()))
 		rule_params = dict(target.build_rule.params)
@@ -228,7 +229,7 @@ def process_build_output(name, targets, rules, default_targets, ofn = None):
 	list(map(writer.write_target, targets))
 	if default_targets and not isinstance(default_targets, (tuple, list)):
 		default_targets = [default_targets]
-	writer.set_default(default_targets, Context.targets)
+	writer.write_default(default_targets, Context.targets)
 
 
 class SelfReference(object):
@@ -1184,46 +1185,43 @@ def generate_build_file(bfn, ofn, mode):
 
 
 def main():
-	def parse_arguments():
-		version_info = 'pyrate version ' + __version__
-		try:
-			if os.environ.get('PYTHONOPTPARSE'):
-				raise ImportError()
-			import argparse
-			parser = argparse.ArgumentParser()
-			parser.add_argument('build_file', nargs = '?', default = 'build.py',
-				help = 'name of the input file - default: build.py')
-			parser.add_argument('-V', '--version', action = 'version', version = version_info)
-			parser.add_argument('-M', '--makefile', action = 'store_true', help = 'enable makefile mode')
-			parser.add_argument('-o', '--output', nargs = 1, default = ['build.ninja'],
-				help = 'name of output build file')
-			args = parser.parse_args()
-			return ([args.build_file], args.output[0], args.makefile)
-		except ImportError:
-			optparse = __import__('optparse')
-			parser = optparse.OptionParser(usage = 'pyrate [options] build_file')
-			parser.add_option('-V', '--version', action='store_true', help = 'display version')
-			parser.add_option('-M', '--makefile', action = 'store_true', help = 'enable makefile mode')
-			parser.add_option('-o', '--output', default = 'build.ninja',
-				help = 'name of output build file', dest='output')
-			(args, posargs) = parser.parse_args()
-			if args.version:
-				sys.stderr.write(version_info + '\n')
-				sys.exit(os.EX_OK)
-			return (posargs, args.output, args.makefile)
-
-	(bfn_list, ofn, mode) = parse_arguments()
-	if not bfn_list:
-		bfn = 'build.py'
-	elif len(bfn_list) == 1:
-		bfn = bfn_list[0]
-	else:
-		sys.stderr.write('too many build_file arguments provided! %s\n' % repr(bfn_list))
-		return os.EX_USAGE
+	version_info = 'pyrate version ' + __version__
+	try:
+		if os.environ.get('PYTHONOPTPARSE'):
+			raise ImportError()
+		import argparse
+		parser = argparse.ArgumentParser()
+		parser.add_argument('build_file', nargs = '?', default = 'build.py',
+			help = 'name of the input file - default: build.py')
+		parser.add_argument('-V', '--version', action = 'version', version = version_info)
+		parser.add_argument('-M', '--makefile', action = 'store_true', help = 'enable makefile mode')
+		parser.add_argument('-o', '--output', nargs = 1, default = None,
+			help = 'name of output build file')
+		args = parser.parse_args()
+		if args.output:
+			args.output = args.output[0]
+		bfn = args.build_file
+	except ImportError:
+		optparse = __import__('optparse')
+		parser = optparse.OptionParser(usage = 'pyrate [options] build_file')
+		parser.add_option('-V', '--version', action='store_true', help = 'display version')
+		parser.add_option('-M', '--makefile', action = 'store_true', help = 'enable makefile mode')
+		parser.add_option('-o', '--output', default = None,
+			help = 'name of output build file', dest='output')
+		(args, posargs) = parser.parse_args()
+		if len(posargs) > 1:
+			sys.stderr.write('too many build_file arguments provided! %s\n' % repr(bfn_list))
+			return os.EX_USAGE
+		elif not posargs:
+			posargs = ['build.py']
+		bfn = posargs[0]
+		if args.version:
+			sys.stderr.write(version_info + '\n')
+			sys.exit(os.EX_OK)
 
 	if os.path.dirname(bfn):
 		os.chdir(os.path.dirname(bfn))
-	generate_build_file(os.path.basename(bfn), ofn, mode)
+	generate_build_file(os.path.basename(bfn), args.output, args.makefile)
 
 if __name__ == '__main__':
 	sys.exit(main())

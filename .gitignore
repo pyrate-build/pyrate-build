@@ -2,6 +2,7 @@
 *.bin
 build
 build.py
+*.d
 dist
 *.egg-info
 examples/examples
