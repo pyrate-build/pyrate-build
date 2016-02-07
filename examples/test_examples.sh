@@ -68,14 +68,18 @@ done
 cp example01.py build.py
 $EXEC
 diff -u example01.ninja build.ninja
-rm build.ninja
+rm build.py build.ninja
 
 cp exampleM1.py build.py
 $EXEC -M
 diff -u exampleM1.make Makefile
-rm Makefile
+rm build.py Makefile
 
+echo
+echo "non essential tests"
+echo
 set +e
+
 $EXEC example01.py example02.py
 
 TESTS=""
@@ -92,3 +96,5 @@ done
 if [ -n "$(which coverage 2> /dev/null)" ]; then
 	mv .coverage ..
 fi
+
+rm -f *.o *.d

@@ -250,7 +250,7 @@ These parameters can also be changed on an existing context instance:
 
     default_context.basedir = 'build'
 
-A context also allows to access the some additional settings - which are described in
+A context also allows to access some additional settings - which are described in
 more detail below. These settings are available as member functions of a context or
 as global variables (that are provided by the default_context):
 

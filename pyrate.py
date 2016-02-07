@@ -13,7 +13,7 @@
 #-#  See the License for the specific language governing permissions and
 #-#  limitations under the License.
 
-__version__ = '0.2.3'
+__version__ = '0.2.4'
 
 import os, sys
 try:
@@ -297,12 +297,13 @@ class BuildSource(object):
 
 
 class BuildTarget(BuildSource):
-	def __init__(self, name, build_rule, build_src,
+	def __init__(self, build_name, build_rule, build_src,
 			on_use_inputs = None, on_use_deps = None, on_use_variables = None,
-			target_type = None, no_rename = False, user_name = None):
+			target_type = None, no_rename = False, install_name = None, user_name = None):
 		BuildSource.__init__(self, on_use_inputs, on_use_deps, on_use_variables)
-		(self.name, self.build_rule, self.build_src) = (name, build_rule, build_src)
-		(self.target_type, self.no_rename, self.user_name) = (target_type, no_rename, user_name)
+		(self.name, self.install_name, self.user_name) = (build_name, install_name, user_name)
+		(self.build_rule, self.build_src) = (build_rule, build_src)
+		(self.target_type, self.no_rename) = (target_type, no_rename)
 		self._drop_opt = False
 
 	def get_hash(self):
@@ -684,7 +685,7 @@ def create_build_helper_external(name, build_helper, **kwargs):
 
 def define_pkg_config_external(name):
 	try:
-		run_process(['pkg-config', '--exists'])
+		run_process(['pkg-config', name, '--exists'])
 	except ProcessError:
 		return
 	return create_build_helper_external(name, 'pkg-config',
@@ -899,6 +900,7 @@ class Context(object):
 		self.implicit_static_library_input = implicit_static_library_input
 		self.implicit_shared_library_input = implicit_shared_library_input
 		self.implicit_executable_input = implicit_executable_input
+		self._context_list = []
 
 	def get_basedir(self, basedir):
 		if basedir:
@@ -979,21 +981,7 @@ class Context(object):
 		target = BuildTarget(target_name, rule, input_list, on_use_inputs = on_use_inputs, **kwargs)
 		return self.registry.register_target(target)
 
-	def object_file(self, obj_name, input_list = None, compiler_opts = None, **kwargs):
-		input_list = force_build_source(input_list)
-		# collect rules from the input object extensions
-		source_target_types = set()
-		for source_target_types_new in map(self.find_target_types, input_list):
-			source_target_types.update(source_target_types_new)
-		if len(source_target_types) != 1:
-			raise Exception('Unable to find unique handler (%s) to generate %s' % (repr(source_target_types), obj_name))
-		obj_name = get_normed_name(obj_name, self.platform.extensions['object'])
-		build_name = os.path.join(self.get_basedir(self.basedir_object_file), obj_name)
-		return self.create_target(build_name, rule = self.find_rule(source_target_types.pop(), 'object'),
-			input_list = self.get_implicit_input(self.implicit_object_input) + input_list + add_rule_vars(opts = compiler_opts),
-			add_self_to_on_use_inputs = True, target_type = 'object', user_name = build_name, **kwargs)
-
-	def link(self, output_name, target_type, input_list, implicit_input_list,
+	def link(self, build_name, target_type, input_list, implicit_input_list,
 			add_self_to_on_use_inputs, link_mode = 'single', **kwargs):
 		input_list = force_build_source(input_list)
 		input_list.extend(self.platform.get_required_inputs(target_type, self.tools))
@@ -1031,16 +1019,31 @@ class Context(object):
 							input_list = self.get_implicit_input(self.implicit_object_input) + [obj] + object_input))
 			rule = self.find_rule('object', target_type)
 
-		target = self.create_target(output_name, rule = rule,
+		target = self.create_target(build_name, rule = rule,
 			input_list = input_list_new + link_input,
 			add_self_to_on_use_inputs = add_self_to_on_use_inputs,
 			target_type = target_type, **kwargs)
 		Context.targets.append(target)
 		return target
 
+	def object_file(self, obj_name, input_list = None, compiler_opts = None, **kwargs):
+		input_list = force_build_source(input_list)
+		# collect rules from the input object extensions
+		source_target_types = set()
+		for source_target_types_new in map(self.find_target_types, input_list):
+			source_target_types.update(source_target_types_new)
+		if len(source_target_types) != 1:
+			raise Exception('Unable to find unique handler (%s) to generate %s' % (repr(source_target_types), obj_name))
+		install_name = get_normed_name(obj_name, self.platform.extensions['object'])
+		build_name = os.path.join(self.get_basedir(self.basedir_object_file), install_name)
+		return self.create_target(build_name, install_name = install_name, user_name = obj_name,
+			target_type = 'object', rule = self.find_rule(source_target_types.pop(), 'object'),
+			input_list = self.get_implicit_input(self.implicit_object_input) + input_list + add_rule_vars(opts = compiler_opts),
+			add_self_to_on_use_inputs = True, **kwargs)
+
 	def shared_library(self, lib_name, input_list, **kwargs):
-		lib_name = get_normed_name(lib_name, self.platform.extensions['shared'])
-		link_name = os.path.basename(lib_name.replace(self.platform.extensions['shared'], ''))
+		install_name = get_normed_name(lib_name, self.platform.extensions['shared'])
+		link_name = os.path.basename(install_name.replace(self.platform.extensions['shared'], ''))
 		if link_name.startswith('lib'):
 			link_name = link_name[3:]
 		on_use_variables = kwargs.pop('on_use_variables', {})
@@ -1048,37 +1051,43 @@ class Context(object):
 		on_use_variables[None]['opts'] += ['-L.', '-l%s' % link_name]
 		on_use_deps = kwargs.pop('on_use_deps', {})
 		on_use_deps.setdefault(None, []).append(SelfReference())
-		build_name = os.path.join(self.get_basedir(self.basedir_shared_libray), lib_name)
-		return self.link(build_name, target_type = 'shared',
-			input_list = input_list, add_self_to_on_use_inputs = False,
+		build_name = os.path.join(self.get_basedir(self.basedir_shared_libray), install_name)
+		return self.link(build_name, install_name = install_name, user_name = lib_name,
+			target_type = 'shared', input_list = input_list, add_self_to_on_use_inputs = False,
 			implicit_input_list = self.get_implicit_input(self.implicit_shared_library_input),
-			on_use_deps = on_use_deps, on_use_variables = on_use_variables, user_name = lib_name, **kwargs)
+			on_use_deps = on_use_deps, on_use_variables = on_use_variables, **kwargs)
 
 	def static_library(self, lib_name, input_list, **kwargs):
-		lib_name = get_normed_name(lib_name, self.platform.extensions['static'])
-		build_name = os.path.join(self.get_basedir(self.basedir_static_library), lib_name)
-		return self.link(build_name, target_type = 'static',
-			input_list = input_list, add_self_to_on_use_inputs = True, user_name = lib_name,
+		install_name = get_normed_name(lib_name, self.platform.extensions['static'])
+		build_name = os.path.join(self.get_basedir(self.basedir_static_library), install_name)
+		return self.link(build_name, install_name = install_name, user_name = lib_name,
+			target_type = 'static', input_list = input_list, add_self_to_on_use_inputs = True,
 			implicit_input_list = self.get_implicit_input(self.implicit_static_library_input), **kwargs)
 
 	def executable(self, exe_name, input_list, **kwargs):
-		if not exe_name.endswith(self.platform.extensions['exe']):
-			exe_name += self.platform.extensions['exe']
-		build_name = os.path.join(self.get_basedir(self.basedir_executable), exe_name)
-		return self.link(build_name, target_type = 'exe',
-			input_list = input_list, add_self_to_on_use_inputs = False, user_name = exe_name,
+		install_name = exe_name
+		if not install_name.endswith(self.platform.extensions['exe']):
+			install_name += self.platform.extensions['exe']
+		build_name = os.path.join(self.get_basedir(self.basedir_executable), install_name)
+		return self.link(build_name, install_name = install_name, user_name = exe_name,
+			target_type = 'exe', input_list = input_list, add_self_to_on_use_inputs = False,
 			implicit_input_list = self.get_implicit_input(self.implicit_executable_input), **kwargs)
 
 	def install(self, target_list):
 		for obj in ensure_list(target_list):
 			obj_target_type = self.find_target_types(obj).pop()
 			install_name = obj.name
-			if obj.user_name:
-				install_name = obj.user_name
+			if obj.install_name:
+				install_name = obj.install_name
 			install_name = os.path.join(self.platform.install_paths[obj_target_type], install_name)
 			rule = self.find_rule(obj_target_type, 'install')
 			target = self.create_target(install_name, rule = rule, input_list = [InputFile(obj.name)])
 			Context.install_targets.append(target)
+
+	def subdir(self, subdir_list):
+		for build_cfg in ensure_list(subdir_list):
+			if os.path.isdir(build_cfg):
+				build_cfg = os.path.join(build_cfg, 'build.py')
 
 
 def create_ctx(ctx, **kwargs):
@@ -1172,22 +1181,16 @@ class Toolchain_LLVM(Toolchain):
 Toolchain.available['llvm'] = Toolchain_LLVM
 
 
-def generate_build_file(bfn, ofn, mode):
+def run_build_file(bfn, ctx, user_env):
 	pyrate_version = Version(__version__)
-	registry = Registry()
-	platform = Platform()
-	tools = ToolHolder([], {})
-	ctx = Context(registry, platform, tools)
-	ctx.tools.toolchain.append(Toolchain_GCC(ctx))
-
-	exec_globals = {}
+	exec_globals = {} # needed to reference itself in default_ctx_call
 	exec_globals.update({
 		# globals
 		'default_context': ctx,
 		'match': match,
 		'pyrate_version': pyrate_version,
-		'tools': tools,
-		'toolchain': tools.toolchain,
+		'tools': ctx.tools,
+		'toolchain': ctx.tools.toolchain,
 		'version': ver,
 		# stable API
 		'create_external': default_ctx_call(exec_globals, Context.create_external),
@@ -1202,7 +1205,7 @@ def generate_build_file(bfn, ofn, mode):
 		'use_toolchain': default_ctx_call(exec_globals, Context.use_toolchain),
 		# development API
 		'BuildSource': BuildSource,
-		'BuildTarget': create_registered(registry, BuildTarget),
+		'BuildTarget': create_registered(ctx.registry, BuildTarget),
 		'BuildTargetFree': BuildTarget,
 		'Context': default_ctx_call(exec_globals, create_ctx),
 		'External': default_ctx_call(exec_globals, External, keyword_only = True),
@@ -1210,13 +1213,24 @@ def generate_build_file(bfn, ofn, mode):
 		'Rule': Rule,
 		'find_rule': default_ctx_call(exec_globals, Context.find_rule),
 	})
-	if mode:
-		exec_globals['build_output'] = ['makefile']
-
+	exec_globals.update(user_env)
 	with open(bfn) as bfp:
 		exec(bfp.read(), exec_globals)
-	default_targets = exec_globals.get('default_targets')
+	return exec_globals
 
+
+def generate_build_file(bfn, ofn, mode):
+	registry = Registry()
+	platform = Platform()
+	tools = ToolHolder([], {})
+	ctx = Context(registry, platform, tools)
+	ctx.tools.toolchain.append(Toolchain_GCC(ctx))
+	user_env = {}
+	if mode:
+		user_env['build_output'] = ['makefile']
+	exec_globals = run_build_file(bfn, ctx, user_env)
+
+	default_targets = exec_globals.get('default_targets')
 	(rules, targets) = registry.write()
 	bsys_list = exec_globals.get('build_output', ['ninja'])
 	for bsys in bsys_list:
