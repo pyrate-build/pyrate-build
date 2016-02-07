@@ -683,6 +683,10 @@ def create_build_helper_external(name, build_helper, **kwargs):
 
 
 def define_pkg_config_external(name):
+	try:
+		run_process(['pkg-config', '--exists'])
+	except ProcessError:
+		return
 	return create_build_helper_external(name, 'pkg-config',
 		version_query = '%s --modversion' % name,
 		link = '%s --libs' % name, compile_cpp = '%s --cflags' % name)
@@ -909,7 +913,8 @@ class Context(object):
 	def find_toolchain(self, name, *args, **kwargs):
 		name = name.lower()
 		if name not in Toolchain.available:
-			raise Exception('Unknown toolchain %r' % name)
+			sys.stderr.write('Unknown toolchain %r\n' % name)
+			return
 		return Toolchain.available[name](self, *args, **kwargs)
 
 	def use_toolchain(self, name, *args, **kwargs):
@@ -920,7 +925,8 @@ class Context(object):
 	def find_external(self, name, *args, **kwargs):
 		name = name.lower()
 		if name not in External.available and not define_pkg_config_external(name):
-			raise Exception('Unknown external %r' % name)
+			sys.stderr.write('Unknown external %r\n' % name)
+			return
 		try:
 			return External.available[name](self, *args, **kwargs)
 		except ProcessError:
