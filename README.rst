@@ -121,7 +121,7 @@ Besides specifying file names by hand, there are many ways to get a list of file
 Common methods include calling the python function ``os.listdir`` or using the helper
 function ``match`` provided by **pyrate**:
 
--  ``match(selector, dir_name = '.')``
+-  ``match(selector, dir_name = '.', recurse = False)``
 
 This functions allows to select files from a directory using a string consisting
 of black / white listing path name patterns.

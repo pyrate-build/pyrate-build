@@ -116,20 +116,26 @@ class VersionComparison(object):
 ver = VersionComparison()
 
 
-def match(value, dn = '.'):
+def match(value, dn, recurse):
 	import fnmatch
 	result = []
-	for fn in os.listdir(dn):
-		accept = False
-		for token in value.split():
-			negate = token.startswith('-')
-			if negate:
-				token = token[1:]
-			if not fnmatch.fnmatch(fn, token):
-				continue
-			accept = not negate
-		if accept:
-			result.append(fn)
+	if recurse:
+		walk_entries = os.walk(dn)
+	else:
+		walk_entries = [(dn, [], os.listdir(dn))]
+	for (root, dirs, files) in walk_entries:
+		for fn in files:
+			fn = os.path.relpath(os.path.join(root, fn), dn)
+			accept = False
+			for token in value.split():
+				negate = token.startswith('-')
+				if negate:
+					token = token[1:]
+				if not fnmatch.fnmatch(fn, token):
+					continue
+				accept = not negate
+			if accept:
+				result.append(fn)
 	result.sort()
 	return result
 
@@ -900,7 +906,10 @@ class Context(object):
 		self.implicit_static_library_input = implicit_static_library_input
 		self.implicit_shared_library_input = implicit_shared_library_input
 		self.implicit_executable_input = implicit_executable_input
-		self._context_list = []
+
+	def match(self, value, dn = '.', recurse = False):
+		matches = match(value = value, dn = dn, recurse = recurse)
+		return matches
 
 	def get_basedir(self, basedir):
 		if basedir:
@@ -1187,7 +1196,6 @@ def run_build_file(bfn, ctx, user_env):
 	exec_globals.update({
 		# globals
 		'default_context': ctx,
-		'match': match,
 		'pyrate_version': pyrate_version,
 		'tools': ctx.tools,
 		'toolchain': ctx.tools.toolchain,
@@ -1198,6 +1206,7 @@ def run_build_file(bfn, ctx, user_env):
 		'find_external': default_ctx_call(exec_globals, Context.find_external),
 		'find_toolchain': default_ctx_call(exec_globals, Context.find_toolchain),
 		'install': default_ctx_call(exec_globals, Context.install),
+		'match': default_ctx_call(exec_globals, Context.match),
 		'object_file': default_ctx_call(exec_globals, Context.object_file),
 		'shared_library': default_ctx_call(exec_globals, Context.shared_library),
 		'static_library': default_ctx_call(exec_globals, Context.static_library),
