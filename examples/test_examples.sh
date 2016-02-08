@@ -96,7 +96,7 @@ echo "non essential tests"
 echo
 set +e
 
-for TEST in test01.py test02.py; do
+for TEST in test01.py test02.py test03.py test04.py test05.py; do
 	$EXEC $TEST 2> /dev/null
 done
 

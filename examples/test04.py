@@ -1,0 +1,1 @@
+tools['c'].std = 'latest'
