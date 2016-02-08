@@ -1,8 +1,6 @@
 #!/usr/bin/env pyrate
 
-assert(pyrate_version < 1.0)
 gcc_cpp11 = find_external('g++', std = 'c++11')
-
 if gcc_cpp11:
 	tools['cpp'] = gcc_cpp11
 	use_external('pthread')

@@ -874,21 +874,32 @@ class Registry(object):
 
 
 class Platform(object):
-	def __init__(self):
-		self.name = 'linux'
-		self.extensions = {'object': '.o', 'shared': '.so', 'static': '.a', 'exe': ''}
-		self.install_paths = {'shared': '/usr/lib', 'static': '/usr/lib', 'exe': '/usr/bin'}
-		self.rules = [
-			Rule(('exe', 'install'), 'install', 'cp $in $out', 'installing executable $out', {}),
-			Rule(('shared', 'install'), 'install_lib', 'cp $in $out', 'installing shared library $out', {}),
-			Rule(('static', 'install'), 'install_lib', 'cp $in $out', 'installing static library $out', {}),
-		]
+	def __init__(self, name, extensions, install_paths, rules):
+		(self.name, self.extensions, self.install_paths, self.rules) = (name, extensions, install_paths, rules)
 
 	def get_required_inputs(self, target_type, toolholder):
 		result = []
 		for tool in toolholder.get_tools():
 			result.extend(tool.required_inputs_by_target_type.get(self.name, {}).get(target_type, []))
 		return result
+
+	def __str__(self):
+		return nice_repr(self, 8)
+
+	def __repr__(self):
+		return '%s' % (self.__class__.__name__)
+
+
+class Platform_linux(Platform):
+	def __init__(self):
+		Platform.__init__(self, name = 'linux',
+			extensions = {'object': '.o', 'shared': '.so', 'static': '.a', 'exe': ''},
+			install_paths = {'shared': '/usr/lib', 'static': '/usr/lib', 'exe': '/usr/bin'},
+			rules = [
+				Rule(('exe', 'install'), 'install', 'cp $in $out', 'installing executable $out', {}),
+				Rule(('shared', 'install'), 'install_lib', 'cp $in $out', 'installing shared library $out', {}),
+				Rule(('static', 'install'), 'install_lib', 'cp $in $out', 'installing static library $out', {}),
+			])
 
 
 class Context(object):
@@ -1118,14 +1129,17 @@ class Context(object):
 			target_type = 'exe', input_list = input_list, add_self_to_on_use_inputs = False,
 			implicit_input_list = self.get_implicit_input(self.implicit_executable_input), **kwargs)
 
-	def install(self, target_list):
+	def install(self, target_list, destination = None):
 		result = []
 		for obj in ensure_list(target_list):
 			obj_target_type = self.find_target_types(obj).pop()
 			install_name = obj.name
 			if obj.install_name:
 				install_name = obj.install_name
-			install_name = os.path.join(self.platform.install_paths[obj_target_type], install_name)
+			prefix = self.platform.install_paths[obj_target_type]
+			if destination:
+				prefix = os.path.abspath(os.path.expanduser(os.path.expandvars(destination)))
+			install_name = os.path.join(prefix, install_name)
 			rule = self.find_rule(obj_target_type, 'install')
 			target = self.create_target(install_name, rule = rule, input_list = [InputFile(obj.name)])
 			result.append(target)
@@ -1133,6 +1147,7 @@ class Context(object):
 		return result
 
 	def include(self, build_file_list, inherit = False, prefix_mode = None):
+		result = []
 		for build_cfg in ensure_list(build_file_list):
 			if os.path.isdir(build_cfg):
 				build_cfg = os.path.join(build_cfg, 'build.py')
@@ -1149,9 +1164,12 @@ class Context(object):
 				kwargs['basepath_static_library'] = self.basepath_static_library
 				kwargs['basepath_shared_library'] = self.basepath_shared_library
 				kwargs['basepath_executable'] = self.basepath_executable
+			registry_start_idx = len(self.registry.target_list)
 			ctx = Context(self.registry, self.platform, self.tools,
 				os.path.join(self.prefix, build_path), prefix_mode = prefix_mode, **kwargs)
 			run_build_file(build_cfg, ctx, {})
+			result.append((build_cfg, self.registry.target_list[registry_start_idx:]))
+		return result
 
 
 def create_ctx(ctx, **kwargs):
@@ -1281,7 +1299,28 @@ def run_build_file(bfn, ctx, user_env):
 	})
 	exec_globals.update(user_env)
 	with open(bfn) as bfp:
-		exec(bfp.read(), exec_globals)
+		try:
+			exec(bfp.read(), exec_globals)
+		except Exception as ex:
+			import traceback, linecache
+			exinfo = traceback.format_exception_only(ex.__class__, ex)
+			if ex.__class__ == SyntaxError:
+				exinfo = exinfo[1:]
+				lineno = ex.lineno
+				content = ''
+				sys.stderr.write('Error while processing %s:%s\n\t%s\n' % (os.path.abspath(bfn), lineno, content.strip()))
+			else:
+				exec_line = None
+				exloc = traceback.extract_tb(sys.exc_info()[2])
+				for idx, entry in enumerate(exloc):
+					if entry[3] == None:
+						exec_line = idx
+				if exec_line != None:
+					exloc = [(bfn, exloc[exec_line][1], '', linecache.getline(bfn, exloc[exec_line][1]))] + exloc[idx:]
+				sys.stderr.write('Error while processing %s\n' % os.path.abspath(bfn))
+				sys.stderr.write(str.join('', traceback.format_list(exloc)))
+			sys.stderr.write(str.join('', exinfo))
+			sys.exit(1)
 	return exec_globals
 
 
@@ -1291,7 +1330,7 @@ def generate_build_file(bfn, ofn, mode):
 		bfn = os.path.basename(bfn)
 
 	registry = Registry()
-	platform = Platform()
+	platform = Platform_linux()
 	tools = ToolHolder([], {})
 	ctx = Context(registry, platform, tools, '', None)
 	ctx.tools.toolchain.append(Toolchain_GCC(ctx))

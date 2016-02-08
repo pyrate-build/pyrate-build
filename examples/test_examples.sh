@@ -96,6 +96,10 @@ echo "non essential tests"
 echo
 set +e
 
+for TEST in test01.py test02.py; do
+	$EXEC $TEST
+done
+
 $EXEC example01.py example02.py
 
 TESTS=""

@@ -17,9 +17,9 @@ opts_feb8a140c0d0f69d31572276363b144b := -lstdc++ -lm
 example11.bin: test.o foo.o
 	$(LINKER_EXE) $(LINKER_EXE_FLAGS) $(opts_feb8a140c0d0f69d31572276363b144b) -o example11.bin test.o foo.o
 
-/usr/bin/example11.bin: example11.bin
-	cp example11.bin /usr/bin/example11.bin
+/tmp/bin/example11.bin: example11.bin
+	cp example11.bin /tmp/bin/example11.bin
 
 all: example11.bin
-install: /usr/bin/example11.bin
+install: /tmp/bin/example11.bin
 .DEFAULT_GOAL := all
