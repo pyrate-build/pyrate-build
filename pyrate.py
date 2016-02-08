@@ -1321,9 +1321,9 @@ def run_build_file(bfn, ctx, user_env):
 				exec_line = None
 				exloc = traceback.extract_tb(sys.exc_info()[2])
 				for idx, entry in enumerate(exloc):
-					if entry[3] == None:
+					if entry[3] is None:
 						exec_line = idx
-				if exec_line != None:
+				if exec_line is not None:
 					exloc = [(bfn, exloc[exec_line][1], '', linecache.getline(bfn, exloc[exec_line][1]))] + exloc[idx:]
 				sys.stderr.write('Error while processing %s\n' % os.path.abspath(bfn))
 				sys.stderr.write(str.join('', traceback.format_list(exloc)))

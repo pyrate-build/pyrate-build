@@ -1,7 +1,7 @@
 #!/usr/bin/env pyrate
 
 default_context.basepath = 'build'
-assert(find_internal('libfoo') == None)
+assert(find_internal('libfoo') is None)
 include('foo', inherit = True)
 libfoo = find_internal('libfoo')
 install(executable('example02.bin', [match('test.cpp'), libfoo]))
