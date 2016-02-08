@@ -98,7 +98,7 @@ set +e
 
 for TEST in test01.py test02.py test03.py test04.py test05.py; do
 	echo $TEST
-	$EXEC $TEST 2> /dev/null
+	$EXEC $TEST
 	rm -f build.ninja
 	echo TEST OK
 done

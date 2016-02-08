@@ -1215,6 +1215,7 @@ class ToolHolder(object):
 	def __init__(self, toolchain, tools):
 		self._tools = tools
 		self.toolchain = toolchain
+		self._deleted = set()
 	def copy(self):
 		return ToolHolder(list(self.toolchain), dict(self._tools))
 	def _update(self):
@@ -1225,7 +1226,7 @@ class ToolHolder(object):
 						tool_instance = toolfactory.get_instance()
 					except (ProcessError, VersionError):
 						tool_instance = None
-					if tool_instance:
+					if tool_instance and (toolname not in self._deleted):
 						self._tools[toolname] = tool_instance
 	def __repr__(self):
 		self._update()
@@ -1236,6 +1237,7 @@ class ToolHolder(object):
 	def __setitem__(self, key, value):
 		self._tools.__setitem__(key, value)
 	def __delitem__(self, key):
+		self._deleted.add(key)
 		self._update()
 		self._tools.__delitem__(key)
 	def __iter__(self):

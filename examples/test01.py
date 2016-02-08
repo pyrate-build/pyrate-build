@@ -1,3 +1,4 @@
+import logging
 assert(pyrate_version > (0, 1, 9))
 assert(pyrate_version >= '0.1.10')
 assert(pyrate_version != '0.0.1')
@@ -19,5 +20,14 @@ repr(toolchain)
 repr(tools)
 len(tools)
 for tool in tools:
-	repr(tool)
+	logging.critical('%s: %s', tool, repr(tools[tool]))
+logging.critical('deleting c/c++')
+del tools['c']
+del tools['cpp']
+for tool in tools:
+	logging.critical('%s: %s', tool, repr(tools[tool]))
+try:
+	object_file('test.obj', ['test.cpp'])
+except:
+	logging.critical('rule not found!')
 assert(False)
