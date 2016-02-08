@@ -31,7 +31,7 @@ build build/foo/libfoo.a: link_static build/foo/foo.o
 build /usr/lib/libfoo.a: install_lib build/foo/libfoo.a
 build build/test.o: compile_cpp test.cpp
 build build/example02.bin: link_exe build/test.o build/foo/libfoo.a
-  opts = -lstdc++
+  opts = -lstdc++ -lm
 build /usr/bin/example02.bin: install build/example02.bin
 build install: phony /usr/lib/libfoo.a /usr/bin/example02.bin
 build all: phony build/foo/libfoo.a build/example02.bin

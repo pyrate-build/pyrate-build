@@ -15,5 +15,5 @@ rule link_exe
 build test_cpp11.o: compile_cpp test_cpp11.cpp
   opts = -pthread
 build example06.bin: link_exe test_cpp11.o
-  opts = -pthread -lstdc++
+  opts = -pthread -lstdc++ -lm
 build all: phony example06.bin

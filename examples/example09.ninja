@@ -15,5 +15,5 @@ rule link_exe
 build test.o: compile_cpp test.cpp
 build foo.o: compile_cpp foo.cpp
 build test.bin: link_exe test.o foo.o
-  opts = -lstdc++
+  opts = -lstdc++ -lm
 build all: phony test.bin

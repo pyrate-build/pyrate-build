@@ -14,22 +14,22 @@ rule link_exe
 
 LINKER_SHARED = gcc
 LINKER_SHARED_FLAGS = -shared -fPIC
-rule link_shared_f515c52ea7d05b9c87bbbfb6fd6dc0d0
-  command = $LINKER_SHARED $LINKER_SHARED_FLAGS -lstdc++ -o $out $in
+rule link_shared_5bf2c757a4055787e65de0fa2c8fc40e
+  command = $LINKER_SHARED $LINKER_SHARED_FLAGS -lstdc++ -lm -o $out $in
   description = link(shared) $out
 
 build foo.o: compile_cpp foo.cpp
   opts = -fPIC -O3
-build libExample04a.so: link_shared_f515c52ea7d05b9c87bbbfb6fd6dc0d0 foo.o
+build libExample04a.so: link_shared_5bf2c757a4055787e65de0fa2c8fc40e foo.o
 build test_1cfedb0e86f69ad43c2ba451c73bb586.o: compile_cpp test.cpp
 build example04a.bin: link_exe test_1cfedb0e86f69ad43c2ba451c73bb586.o | libExample04a.so
-  opts = -L. -lExample04a -lstdc++
-build libExample04b.so: link_shared_f515c52ea7d05b9c87bbbfb6fd6dc0d0 foo.o
+  opts = -L. -lExample04a -lstdc++ -lm
+build libExample04b.so: link_shared_5bf2c757a4055787e65de0fa2c8fc40e foo.o
 build example04b.bin: link_exe test_1cfedb0e86f69ad43c2ba451c73bb586.o | libExample04b.so
-  opts = -L. -lExample04b -lstdc++
+  opts = -L. -lExample04b -lstdc++ -lm
 build test_ddc519d468dd216db1ca93f9f80094a0.o: compile_cpp test.cpp
   opts = -O0
 build example04c.bin: link_exe test_ddc519d468dd216db1ca93f9f80094a0.o | libExample04b.so
-  opts = -L. -lExample04b -lstdc++
+  opts = -L. -lExample04b -lstdc++ -lm
 build all: phony libExample04a.so example04a.bin libExample04b.so example04b.bin example04c.bin
 default example04c.bin

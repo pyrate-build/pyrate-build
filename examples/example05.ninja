@@ -8,16 +8,16 @@ rule compile_cpp
 
 LINKER_EXE = gcc
 LINKER_EXE_FLAGS = 
-rule link_exe_786d8208a03cca3310ca96b2ebf2ff59
-  command = $LINKER_EXE $LINKER_EXE_FLAGS -lstdc++ -o $out $in
+rule link_exe_4c70e217a64a8acfed3d143a02115d67
+  command = $LINKER_EXE $LINKER_EXE_FLAGS -lstdc++ -lm -o $out $in
   description = link(exe) $out
 
 build foo_a30d37c95b97852fd6dc8f4a1cf0a8e1.o: compile_cpp foo.cpp
 build test_1cfedb0e86f69ad43c2ba451c73bb586.o: compile_cpp test.cpp
-build example05.bin: link_exe_786d8208a03cca3310ca96b2ebf2ff59 foo_a30d37c95b97852fd6dc8f4a1cf0a8e1.o test_1cfedb0e86f69ad43c2ba451c73bb586.o
+build example05.bin: link_exe_4c70e217a64a8acfed3d143a02115d67 foo_a30d37c95b97852fd6dc8f4a1cf0a8e1.o test_1cfedb0e86f69ad43c2ba451c73bb586.o
 build foo_b323f8bc970eb8ff180102d50bd99af1.o: compile_cpp foo.cpp
   opts = -O3
 build test_ea06e0f15a7fb50d00928f0d8923fdef.o: compile_cpp test.cpp
   opts = -O3
-build example05_19d464c5234703e82ca0d62b48b74514.bin: link_exe_786d8208a03cca3310ca96b2ebf2ff59 foo_b323f8bc970eb8ff180102d50bd99af1.o test_ea06e0f15a7fb50d00928f0d8923fdef.o
-build all: phony example05.bin example05.bin example05_19d464c5234703e82ca0d62b48b74514.bin
+build example05_9a67b72200eef9ee9aafcfde9aee062a.bin: link_exe_4c70e217a64a8acfed3d143a02115d67 foo_b323f8bc970eb8ff180102d50bd99af1.o test_ea06e0f15a7fb50d00928f0d8923fdef.o
+build all: phony example05.bin example05.bin example05_9a67b72200eef9ee9aafcfde9aee062a.bin

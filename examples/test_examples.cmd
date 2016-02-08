@@ -1,3 +1,11 @@
 %PYTHON%\python pyrate.py examples\example01.py
 %PYTHON%\python pyrate.py examples\example02.py
 %PYTHON%\python pyrate.py examples\example03.py
+%PYTHON%\python pyrate.py examples\example04.py
+%PYTHON%\python pyrate.py examples\example05.py
+%PYTHON%\python pyrate.py examples\example06.py
+%PYTHON%\python pyrate.py examples\example07.py
+%PYTHON%\python pyrate.py examples\example08.py
+%PYTHON%\python pyrate.py examples\example09.py
+%PYTHON%\python pyrate.py examples\example10.py
+%PYTHON%\python pyrate.py examples\example11.py

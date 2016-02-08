@@ -19,7 +19,7 @@ rule link_exe
 build test.o: compile_cpp test.cpp
 build foo.o: compile_cpp foo.cpp
 build example11.bin: link_exe test.o foo.o
-  opts = -lstdc++
+  opts = -lstdc++ -lm
 build /usr/bin/example11.bin: install example11.bin
 build install: phony /usr/bin/example11.bin
 build all: phony example11.bin

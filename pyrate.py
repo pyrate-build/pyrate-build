@@ -257,15 +257,26 @@ class SelfReference(object):
 
 
 class Rule(object):
-	def __init__(self, connection, name, cmd, desc, defaults, **kwargs):
-		(self.connection, self.name, self.cmd, self.desc, self.defaults) = (connection, name, cmd, desc, defaults)
-		self.params = sorted(kwargs.items())
+	def __init__(self, connection, name, cmd, desc, defaults,
+			target_on_use_inputs = None, target_on_use_deps = None, target_on_use_variables = None, **kwargs):
+		# persistent values
+		(self.name, self.cmd, self.desc, self.defaults, self.params) = (name, cmd, desc, defaults, sorted(kwargs.items()))
+		# transient values used to help build system
+		(self.connection, self.target_on_use_inputs, self.target_on_use_deps, self.target_on_use_variables) =\
+			(connection, target_on_use_inputs, target_on_use_deps, target_on_use_variables)
 
 	def get_hash(self):
 		return calc_hash([self.name, self.cmd, self.desc, sorted(self.defaults.items()), self.params])
 
-	def __repr__(self):
+	def clone(self):
+		return Rule(self.connection, self.name, self.cmd, self.desc, self.defaults,
+			self.target_on_use_inputs, self.target_on_use_deps, self.target_on_use_variables, **dict(self.params))
+
+	def __str__(self):
 		return nice_repr(self, 8)
+
+	def __repr__(self):
+		return '%s(%s)' % (self.__class__.__name__, repr(self.name))
 
 
 class BuildSource(object):
@@ -298,7 +309,7 @@ class BuildSource(object):
 		hash_tmp = get_dict_keys(self.on_use_inputs) + get_dict_keys(self.on_use_deps)
 		return calc_hash(hash_tmp + sorted(self.on_use_variables.items()))
 
-	def __repr__(self):
+	def __str__(self):
 		return nice_repr(self, 14)
 
 
@@ -338,7 +349,7 @@ class BuildTarget(BuildSource):
 	def get_build_variables(self):
 		def combine_variables(result, variables):
 			for key, values in variables.items():
-				for value in values:
+				for value in none_to_obj(values, []):
 					opt_list = result.setdefault(key, [])
 					if value not in opt_list:
 						opt_list.append(value)
@@ -355,6 +366,9 @@ class BuildTarget(BuildSource):
 				result[key] = tmp.strip()
 		return result
 
+	def __repr__(self):
+		return '%s(%s)' % (self.__class__.__name__, repr(self.name))
+
 
 class InputFile(BuildSource):
 	def __init__(self, name):
@@ -362,12 +376,15 @@ class InputFile(BuildSource):
 		BuildSource.__init__(self, on_use_inputs = {None: [self]})
 
 	def __repr__(self):
-		return '%s(name = %s, on_use_inputs = {None: [self]})' % (self.__class__.__name__, self.name)
+		return '%s(name = %s, on_use_inputs = {None: [self]})' % (self.__class__.__name__, repr(self.name))
 
 
 class RuleVariables(BuildSource):
 	def __init__(self, on_use_variables):
 		BuildSource.__init__(self, on_use_variables = on_use_variables)
+
+	def __repr__(self):
+		return '%s(%s)' % (self.__class__.__name__, self.on_use_variables)
 
 
 def add_rule_vars(**kwargs):
@@ -395,6 +412,11 @@ class External(BuildSource):
 		if version_req and not version_req(self.version):
 			raise VersionError('Unable to find correct version!')
 
+	def __repr__(self):
+		try:
+			return '%s(%s)' % (self.__class__.__name__, self.version)
+		except:
+			return self.__class__.__name__
 External.available = {}
 
 
@@ -645,13 +667,13 @@ register_external(External_pthread, 'pthread')
 
 class External_libstdcpp(SimpleExternal):
 	def __init__(self, ctx):
-		SimpleExternal.__init__(self, ctx, link_shared = '-lstdc++', link_exe = '-lstdc++')
+		SimpleExternal.__init__(self, ctx, link_shared = '-lstdc++ -lm', link_exe = '-lstdc++ -lm')
 register_external(External_libstdcpp, 'libstdc++', 'libstdcpp')
 
 
 class External_libcpp(SimpleExternal):
 	def __init__(self, ctx):
-		SimpleExternal.__init__(self, ctx, link_shared = '-lc++', link_exe = '-lc++')
+		SimpleExternal.__init__(self, ctx, link_shared = '-lc++ -lc++abi -lm', link_exe = '-lc++ -lc++abi -lm')
 register_external(External_libcpp, 'libc++', 'libcpp')
 
 
@@ -928,7 +950,7 @@ class Context(object):
 
 	def find_internal(self, name):
 		result = set()
-		for obj in Context.targets:
+		for obj in Context.targets + self.registry.target_list:
 			if name in [obj.name, obj.install_name, obj.user_name]:
 				result.add(obj)
 		if len(result) == 1:
@@ -963,22 +985,19 @@ class Context(object):
 		return self.find_external(name, *args, **kwargs_external)
 
 	def find_rule(self, ttfrom, ttto): # return a new instance going from target type (from -> to)
-		def clone_rule(r):
-			return Rule(r.connection, r.name, r.cmd, r.desc, r.defaults, **dict(r.params))
 		for tool in self.tools.get_tools():
 			for rule in tool.rules:
 				if rule.connection == (ttfrom, ttto):
-					return clone_rule(rule)
+					return rule.clone()
 		for rule in self.platform.rules:
 			if rule.connection == (ttfrom, ttto):
-				return clone_rule(rule)
+				return rule.clone()
 		raise Exception('build rule translating %s -> %s not found!' % (ttfrom, ttto))
 
 	def find_target_types(self, obj):
 		result = set()
-		if hasattr(obj, 'target_type'):
-			if obj.target_type:
-				result.add(obj.target_type)
+		if hasattr(obj, 'target_type') and obj.target_type:
+			result.add(obj.target_type)
 		if hasattr(obj, 'name'):
 			ext = os.path.splitext(obj.name)[1].lower()
 			for tool in self.tools.get_tools():
@@ -1100,6 +1119,7 @@ class Context(object):
 			implicit_input_list = self.get_implicit_input(self.implicit_executable_input), **kwargs)
 
 	def install(self, target_list):
+		result = []
 		for obj in ensure_list(target_list):
 			obj_target_type = self.find_target_types(obj).pop()
 			install_name = obj.name
@@ -1108,7 +1128,9 @@ class Context(object):
 			install_name = os.path.join(self.platform.install_paths[obj_target_type], install_name)
 			rule = self.find_rule(obj_target_type, 'install')
 			target = self.create_target(install_name, rule = rule, input_list = [InputFile(obj.name)])
+			result.append(target)
 			Context.install_targets.append(target)
+		return result
 
 	def include(self, build_file_list, inherit = False, prefix_mode = None):
 		for build_cfg in ensure_list(build_file_list):

@@ -19,7 +19,7 @@ rule link_exe
 build build/obj/test.o: compile_cpp test.cpp
 build build/obj/foo.o: compile_cpp foo.cpp
 build build/subdir/example11.bin: link_exe build/obj/test.o build/obj/foo.o
-  opts = -lstdc++
+  opts = -lstdc++ -lm
 build /usr/bin/subdir/example11.bin: install build/subdir/example11.bin
 build install: phony /usr/bin/subdir/example11.bin
 build all: phony build/subdir/example11.bin

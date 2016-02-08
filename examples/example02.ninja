@@ -22,5 +22,5 @@ build foo.o: compile_cpp foo.cpp
 build libExample2.a: link_static foo.o
 build test.o: compile_cpp test.cpp
 build example02.bin: link_exe test.o libExample2.a
-  opts = -lstdc++
+  opts = -lstdc++ -lm
 build all: phony libExample2.a example02.bin

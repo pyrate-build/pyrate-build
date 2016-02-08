@@ -19,11 +19,11 @@ rule swig_cpp_python
 build foo.o: compile_cpp foo.cpp
   opts = -fPIC
 build libExample7.so: link_shared foo.o
-  opts = -lstdc++
+  opts = -lstdc++ -lm
 build py_foo.o: compile_cpp py_foo.cpp
   opts = -I/usr/include/python2.7 -I/usr/include/python2.7 -fno-strict-aliasing -O2 -pipe -fomit-frame-pointer -march=core2 -fwrapv -DNDEBUG -fPIC
 build py_foo.cpp: swig_cpp_python foo.i
   module_name = py_foo
 build _py_foo.so: link_shared py_foo.o | libExample7.so
-  opts = -lpython2.7 -lpthread -ldl -lutil -lm -Xlinker -export-dynamic -L. -lExample7 -lstdc++
+  opts = -lpython2.7 -lpthread -ldl -lutil -lm -Xlinker -export-dynamic -L. -lExample7 -lstdc++ -lm
 build all: phony libExample7.so _py_foo.so

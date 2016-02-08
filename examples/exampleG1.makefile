@@ -12,9 +12,9 @@ test.o: test.cpp
 foo.o: foo.cpp
 	$(CXX) $(CXX_FLAGS) ${opts} -MMD -MT foo.o -MF foo.o.d -c foo.cpp -o foo.o
 
-opts_9e8cf39befe9dfb32ef2884bf7903ce0 := -lstdc++
+opts_feb8a140c0d0f69d31572276363b144b := -lstdc++ -lm
 exampleG1.bin: test.o foo.o
-	$(LINKER_EXE) $(LINKER_EXE_FLAGS) $(opts_9e8cf39befe9dfb32ef2884bf7903ce0) -o exampleG1.bin test.o foo.o
+	$(LINKER_EXE) $(LINKER_EXE_FLAGS) $(opts_feb8a140c0d0f69d31572276363b144b) -o exampleG1.bin test.o foo.o
 
 all: exampleG1.bin
 .DEFAULT_GOAL := all

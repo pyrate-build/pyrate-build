@@ -16,5 +16,5 @@ build foo_obj.o: compile_cpp foo.cpp
   opts = -O3
 build test.o: compile_cpp test.cpp
 build example07.bin: link_exe test.o foo_obj.o
-  opts = -lstdc++
+  opts = -lstdc++ -lm
 build all: phony example07.bin
