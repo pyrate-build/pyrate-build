@@ -415,7 +415,7 @@ class External(BuildSource):
 	def __repr__(self):
 		try:
 			return '%s(%s)' % (self.__class__.__name__, self.version)
-		except:
+		except Exception:
 			return self.__class__.__name__
 External.available = {}
 
@@ -1324,7 +1324,7 @@ def run_build_file(bfn, ctx, user_env):
 					if entry[3] == None:
 						exec_line = idx
 				if exec_line != None:
-					exloc = [(bfn, exloc[exec_line][1], '', linecache.getline(bfn, exloc[exec_line][1]))] + exloc[idx:]
+					exloc = [(bfn, exloc[exec_line][1], '', linecache.getline(bfn, exloc[exec_line][1]))] + exloc[exec_line:]
 				sys.stderr.write('Error while processing %s\n' % os.path.abspath(bfn))
 				sys.stderr.write(str.join('', traceback.format_list(exloc)))
 			sys.stderr.write(str.join('', exinfo))
