@@ -64,7 +64,7 @@ run_test_general() {
 
 $EXEC --version
 TESTS="../examples/example01.py example01.py example02.py example03.py example04.py example05.py"
-TESTS="$TESTS example06.py example07.py example08.py example09.py example10.py example11.py example12.py"
+TESTS="$TESTS example06.py example07.py example08.py example09.py example10.py example11.py"
 for EXAMPLE in $TESTS; do
 	run_test $EXAMPLE
 done
@@ -96,7 +96,7 @@ echo "non essential tests"
 echo
 set +e
 
-for TEST in test01.py test02.py test03.py test04.py; do
+for TEST in test01.py test02.py test03.py test04.py test05.py; do
 	echo $TEST
 	$EXEC $TEST 2> /dev/null
 	rm -f build.ninja
