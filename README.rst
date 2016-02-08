@@ -136,14 +136,18 @@ There are four global helper functions to define object files, executables and l
 on a list of build inputs (which can be files, other targets or externals - as shown in `Specifying build input`_):
 
 - ``executable(name, input_list, compiler_opts = None, linker_opts = None)``
-- ``shared_library(name, input_list, compiler_opts = None, linker_opts = None)``
-- ``static_library(name, input_list, compiler_opts = None, linker_opts = None)``
+- ``shared_library(name, input_list = None, compiler_opts = None, linker_opts = None)``
+- ``static_library(name, input_list = None, compiler_opts = None, linker_opts = None)``
 - ``object_file(name, input_list, compiler_opts = None)``
 
 Each function returns a build target object, that can be used as input / dependency of another function.
 If multiple executables / libraries or object files with the same name but different inputs / options
 are defined, **pyrate** will ensure that the output will have a unique name
 (by appending a hash based suffix as needed). More details about this is available in `Target Collision Avoidance`_.
+
+If no input_list is given to ``shared_library`` or ``static_library``, a BuildSource will be created,
+that represents the specified library. Existing libraries can quickly be defined as dependencies this way,
+but the name has to be a path to an existing file!
 
 These functions exist as global functions and as member functions of a so-called build context,
 that describes how these functions are processed. The global functions are just executing

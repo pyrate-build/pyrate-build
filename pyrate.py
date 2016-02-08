@@ -332,9 +332,15 @@ class BuildTarget(BuildSource):
 	def _get_build(self, src_getter, default, combine):
 		result = default()
 		for entry in self.build_src:
-			src_default = src_getter(entry).get(None, default())
-			new = src_getter(entry).get(self.build_rule.name, src_default)
-			combine(result, new)
+			src_dict = src_getter(entry)
+			found = False
+			for key, value in src_dict.items():
+				if key and (key in self.build_rule.name):
+					combine(result, value)
+					found = True
+					break
+			if not found:
+				combine(result, src_dict.get(None, default()))
 		return result
 
 	def get_build_inputs(self):
@@ -371,9 +377,10 @@ class BuildTarget(BuildSource):
 
 
 class InputFile(BuildSource):
-	def __init__(self, name):
+	def __init__(self, name, rule_list = None):
 		self.name = name
-		BuildSource.__init__(self, on_use_inputs = {None: [self]})
+		rule_list = ensure_list(none_to_obj(rule_list, [None]))
+		BuildSource.__init__(self, on_use_inputs = dict.fromkeys(rule_list, [self]))
 
 	def __repr__(self):
 		return '%s(name = %s, on_use_inputs = {None: [self]})' % (self.__class__.__name__, repr(self.name))
@@ -1097,11 +1104,17 @@ class Context(object):
 			input_list = self.get_implicit_input(self.implicit_object_input) + input_list + add_rule_vars(opts = compiler_opts),
 			add_self_to_on_use_inputs = True, **kwargs)
 
-	def shared_library(self, lib_name, input_list, **kwargs):
+	def shared_library(self, lib_name, input_list = None, **kwargs):
 		install_name = get_normed_name(lib_name, self.platform.extensions['shared'])
 		link_name = os.path.basename(install_name.replace(self.platform.extensions['shared'], ''))
 		if link_name.startswith('lib'):
 			link_name = link_name[3:]
+		if (input_list is None) and not kwargs:
+			if not os.path.exists(install_name):
+				raise Exception('Unable to create reference to shared library: %s does not exist!' % repr(install_name))
+			return RuleVariables(dict.fromkeys(['link_exe', 'link_shared'], {'opts': ['-l%s' % link_name]}))
+		if not input_list:
+			raise Exception('shared_library(%s) was defined with empty input list!' % repr(lib_name))
 		on_use_variables = kwargs.pop('on_use_variables', {})
 		on_use_variables.setdefault(None, {}).setdefault('opts', [])
 		on_use_variables[None]['opts'] += ['-L.', '-l%s' % link_name]
@@ -1113,8 +1126,14 @@ class Context(object):
 			implicit_input_list = self.get_implicit_input(self.implicit_shared_library_input),
 			on_use_deps = on_use_deps, on_use_variables = on_use_variables, **kwargs)
 
-	def static_library(self, lib_name, input_list, **kwargs):
+	def static_library(self, lib_name, input_list = None, **kwargs):
 		install_name = get_normed_name(lib_name, self.platform.extensions['static'])
+		if (input_list is None) and not kwargs:
+			if not os.path.exists(install_name):
+				raise Exception('Unable to create reference to static library: %s does not exist!' % repr(install_name))
+			return InputFile(install_name, rule_list = ['link_exe', 'link_shared', 'link_static'])
+		if not input_list:
+			raise Exception('static_library(%s) was defined with empty input list!' % repr(lib_name))
 		build_name = os.path.join(self.get_basepath(self.basepath_static_library), install_name)
 		return self.link(build_name, install_name = install_name, user_name = lib_name,
 			target_type = 'static', input_list = input_list, add_self_to_on_use_inputs = True,

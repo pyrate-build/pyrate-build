@@ -7,4 +7,5 @@ rule compile_link_exe_cpp
   deps = gcc
 
 build example10.bin: compile_link_exe_cpp test.cpp foo.cpp
+  opts = -lstdc++ -lm
 build all: phony example10.bin
