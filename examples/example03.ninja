@@ -12,9 +12,11 @@ rule link_exe_4c70e217a64a8acfed3d143a02115d67
   command = $LINKER_EXE $LINKER_EXE_FLAGS -lstdc++ -lm -o $out $in
   description = link(exe) $out
 
-build test_1cfedb0e86f69ad43c2ba451c73bb586.o: compile_cpp test.cpp
-build foo_a30d37c95b97852fd6dc8f4a1cf0a8e1.o: compile_cpp foo.cpp
-build example03_debug.bin: link_exe_4c70e217a64a8acfed3d143a02115d67 test_1cfedb0e86f69ad43c2ba451c73bb586.o foo_a30d37c95b97852fd6dc8f4a1cf0a8e1.o
+build test_22cd8d97ec282a502085129f1f61c0b6.o: compile_cpp test.cpp
+  opts = -DDEBUG
+build foo_89bd1adde2bb954e853bfb5b5aa84631.o: compile_cpp foo.cpp
+  opts = -DDEBUG
+build example03_debug.bin: link_exe_4c70e217a64a8acfed3d143a02115d67 test_22cd8d97ec282a502085129f1f61c0b6.o foo_89bd1adde2bb954e853bfb5b5aa84631.o
 build test_ea06e0f15a7fb50d00928f0d8923fdef.o: compile_cpp test.cpp
   opts = -O3
 build foo_b323f8bc970eb8ff180102d50bd99af1.o: compile_cpp foo.cpp

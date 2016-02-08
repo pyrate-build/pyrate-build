@@ -1263,6 +1263,13 @@ class Toolchain_LLVM(Toolchain):
 Toolchain.available['llvm'] = Toolchain_LLVM
 
 
+def create_macro(expr):
+	rule_list = []
+	for lang in ['c', 'cpp']:
+		rule_list.extend(['compile_' + lang, 'compile_link_exe_' + lang, 'compile_link_shared_' + lang])
+	return RuleVariables(dict.fromkeys(rule_list, {'opts': ['-D' + expr]}))
+
+
 def run_build_file(bfn, ctx, user_env):
 	pyrate_version = Version(__version__)
 	exec_globals = {} # needed to reference itself in default_ctx_call
@@ -1272,6 +1279,7 @@ def run_build_file(bfn, ctx, user_env):
 		'pyrate_version': pyrate_version,
 		'tools': ctx.tools,
 		'toolchain': ctx.tools.toolchain,
+		'macro': create_macro,
 		'version': ver,
 		# stable API
 		'create_external': default_ctx_call(exec_globals, Context.create_external),

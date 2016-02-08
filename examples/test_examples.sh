@@ -97,10 +97,10 @@ echo
 set +e
 
 for TEST in test01.py test02.py; do
-	$EXEC $TEST
+	$EXEC $TEST 2> /dev/null
 done
 
-$EXEC example01.py example02.py
+$EXEC example01.py example02.py 2> /dev/null
 
 TESTS=""
 if [ -n "$(which swig 2> /dev/null)" ]; then
