@@ -26,14 +26,17 @@ except ImportError:
 	def calc_hash(value):
 		return __import__('md5').md5(repr(value)).hexdigest()
 
+
 def ensure_list(value):
 	if isinstance(value, (list, tuple)):
 		return list(value)
 	elif value:
 		return [value]
 
+
 class ProcessError(Exception):
 	pass
+
 
 def run_process(args):
 	import subprocess
@@ -59,56 +62,6 @@ def nice_repr(ref, keylen, delim = '   '):
 		else:
 			result.append(delim + '%s = %s' % (key.ljust(keylen), indent_repr(value, delim).lstrip()))
 	return '%s(\n%s)' % (ref.__class__.__name__, str.join('\n', result))
-
-
-class VersionError(Exception):
-	pass
-
-
-class Version(object):
-	def __init__(self, value):
-		try:
-			if isinstance(value, Version):
-				value = value.value
-			if isinstance(value, (list, tuple)): # (1,32,5)
-				value = list(value)
-			elif isinstance(value, str): # '1.32.5'
-				value = list(map(int, value.split('.')))
-			else:
-				value = list(map(int, str(value).split('.'))) # 1.32
-		except Exception:
-			raise VersionError('unable to parse version string %s' % repr(value))
-		self.value = tuple(value + [0] * (4 - len(value)))
-	def __repr__(self):
-		return 'Version(%s)' % str.join('.', map(repr, self.value))
-	def __lt__(self, other):
-		return self.value < Version(other).value
-	def __le__(self, other):
-		return self.value <= Version(other).value
-	def __eq__(self, other):
-		return self.value == Version(other).value
-	def __ne__(self, other):
-		return self.value != Version(other).value
-	def __gt__(self, other):
-		return self.value > Version(other).value
-	def __ge__(self, other):
-		return self.value >= Version(other).value
-
-
-class VersionComparison(object):
-	def __lt__(self, other):
-		return Version(other).__gt__
-	def __le__(self, other):
-		return Version(other).__ge__
-	def __eq__(self, other):
-		return Version(other).__eq__
-	def __ne__(self, other):
-		return Version(other).__ne__
-	def __gt__(self, other):
-		return Version(other).__lt__
-	def __ge__(self, other):
-		return Version(other).__le__
-ver = VersionComparison()
 
 
 def match(value, dn, recurse):
@@ -142,104 +95,6 @@ class Delayed(object):
 		return self._cls(*self._args, **self._kwargs)
 	def __repr__(self):
 		return 'Delayed(%s(*%s, **%s))' % (self._cls, self._args, self._kwargs)
-
-
-class BuildOutput(object):
-	def __init__(self, fn, default_fn):
-		if fn is None:
-			fn = default_fn
-		self._fn = fn
-		self._fp = open(self._fn, 'w')
-BuildOutput.available = {}
-
-
-class NinjaBuildFileWriter(BuildOutput):
-	def __init__(self, fn = None):
-		BuildOutput.__init__(self, fn, 'build.ninja')
-		self._vars = {}
-	def _write_var(self, key, value):
-		if self._vars.get(key) != value:
-			self._fp.write('%s = %s\n' % (key, value.strip()))
-		self._vars[key] = value
-	def write_default(self, default_targets):
-		if (len(default_targets) == 1) and (default_targets[0].name == 'all'):
-			return
-		self._fp.write('default %s\n' % str.join(' ', map(lambda t: t.name, default_targets)))
-	def write_rule(self, rule):
-		for key, value in sorted(rule.defaults.items()):
-			self._write_var(key, value)
-		self._fp.write('rule %s\n' % rule.name)
-		self._fp.write('  command = %s\n' % rule.cmd)
-		self._fp.write('  description = %s\n' % rule.desc)
-		for key_value in rule.params:
-			self._fp.write('  %s = %s\n' % key_value)
-		self._fp.write('\n')
-	def write_target(self, target):
-		inputs = str.join(' ', map(lambda t: t.name, target.get_build_inputs()))
-		self._fp.write('build %s: %s %s' % (target.name, target.build_rule.name, inputs))
-		if target.get_build_deps():
-			self._fp.write(' | %s' % str.join(' ', map(lambda t: t.name, target.get_build_deps())))
-		self._fp.write('\n')
-		for key_value in sorted(target.get_build_variables().items()):
-			self._fp.write('  %s = %s\n' % key_value)
-BuildOutput.available['ninja'] = NinjaBuildFileWriter
-
-
-class MakefileWriter(BuildOutput):
-	def __init__(self, fn = None):
-		BuildOutput.__init__(self, fn, 'Makefile')
-		self._vars = set()
-	def _write_var(self, key, value):
-		self._fp.write('%s := %s\n' % (key, value.strip()))
-	def write_default(self, default_targets):
-		default = default_targets[0].name
-		if len(default_targets) > 1:
-			default = 'default_target'
-			self._fp.write('%s: %s\n' % (default, str.join(' ', map(lambda t: t.name, default_targets))))
-			self._fp.write('.PHONY: %s\n' % default)
-		self._fp.write('.DEFAULT_GOAL := %s\n' % default)
-	def write_rule(self, rule):
-		for key, value in sorted(rule.defaults.items()):
-			self._write_var(key, value)
-		self._fp.write('\n')
-	def write_target(self, target):
-		def replace_var(value, var_name, var_value):
-			return value.replace('$%s' % var_name, var_value).replace('${%s}' % var_name, var_value)
-		def replace_var_ref(value, var_name, new_var_name):
-			return replace_var(value, var_name, '$(%s)' % new_var_name)
-
-		variables = target.get_build_variables()
-		for opt, opt_value in sorted(variables.items()):
-			opt_hash = calc_hash([opt, opt_value])
-			if opt_hash not in self._vars:
-				self._vars.add(opt_hash)
-				self._write_var(opt + '_' + opt_hash, opt_value)
-		inputs = list(map(lambda t: t.name, target.get_build_inputs()))
-		deps = inputs + list(map(lambda t: t.name, target.get_build_deps()))
-		rule_params = dict(target.build_rule.params)
-		if rule_params.get('deps') == 'gcc':
-			depfile = replace_var(rule_params['depfile'], 'out', target.name)
-			self._fp.write('-include %s\n' % depfile)
-		self._fp.write('%s: %s\n' % (target.name, str.join(' ', deps)))
-		cmd = replace_var(replace_var(target.build_rule.cmd, 'out', target.name), 'in', str.join(' ', inputs))
-		for opt in sorted(target.build_rule.defaults.keys(), key = len, reverse = True):
-			cmd = replace_var_ref(cmd, opt, opt)
-		for opt in sorted(variables.keys(), key = len, reverse = True):
-			opt_hash = calc_hash([opt, variables[opt]])
-			cmd = replace_var_ref(cmd, opt, opt + '_' + opt_hash)
-		if cmd:
-			self._fp.write('\t%s\n\n' % cmd)
-		if target.build_rule == phony_rule:
-			self._fp.write('.PHONY: %s\n' % target.name)
-BuildOutput.available['makefile'] = MakefileWriter
-
-
-def process_build_output(name, targets, rules, default_targets, ofn = None):
-	name = name.lower()
-	writer = BuildOutput.available[name](ofn)
-	list(map(writer.write_rule, filter(lambda r: r != phony_rule, rules)))
-	list(map(writer.write_target, targets))
-	writer.write_default(default_targets)
 
 
 class SelfReference(object):
@@ -308,6 +163,43 @@ class BuildSource(object):
 		return nice_repr(self, 14)
 
 
+class InputFile(BuildSource):
+	def __init__(self, name, rule_list = None):
+		self.name = name
+		rule_list = ensure_list(rule_list or [None])
+		BuildSource.__init__(self, on_use_inputs = dict.fromkeys(rule_list, [self]))
+
+	def __repr__(self):
+		return '%s(name = %s, on_use_inputs = {None: [self]})' % (self.__class__.__name__, repr(self.name))
+
+
+class TargetAlias(BuildSource):
+	def __init__(self, target):
+		self.target = target
+		BuildSource.__init__(self, on_use_inputs = {None: [target]})
+
+	def __repr__(self):
+		return '%s(target = %s)' % (self.__class__.__name__, repr(self.target))
+
+
+class RuleVariables(BuildSource):
+	def __init__(self, on_use_variables):
+		BuildSource.__init__(self, on_use_variables = on_use_variables)
+
+	def __repr__(self):
+		return '%s(%s)' % (self.__class__.__name__, self.on_use_variables)
+
+
+def add_rule_vars(**kwargs):
+	variables = {}
+	for key, value in kwargs.items():
+		if value:
+			variables.setdefault(key, []).extend(ensure_list(value))
+	if variables:
+		return [RuleVariables(on_use_variables = {None: variables})]
+	return []
+
+
 class BuildTarget(BuildSource):
 	def __init__(self, build_name, build_rule, build_src,
 			on_use_inputs = None, on_use_deps = None, on_use_variables = None,
@@ -369,381 +261,6 @@ class BuildTarget(BuildSource):
 
 	def __repr__(self):
 		return '%s(%s)' % (self.__class__.__name__, repr(self.name))
-
-
-class InputFile(BuildSource):
-	def __init__(self, name, rule_list = None):
-		self.name = name
-		rule_list = ensure_list(rule_list or [None])
-		BuildSource.__init__(self, on_use_inputs = dict.fromkeys(rule_list, [self]))
-
-	def __repr__(self):
-		return '%s(name = %s, on_use_inputs = {None: [self]})' % (self.__class__.__name__, repr(self.name))
-
-
-class TargetAlias(BuildSource):
-	def __init__(self, target):
-		self.target = target
-		BuildSource.__init__(self, on_use_inputs = {None: [target]})
-
-	def __repr__(self):
-		return '%s(target = %s)' % (self.__class__.__name__, repr(self.target))
-
-
-class RuleVariables(BuildSource):
-	def __init__(self, on_use_variables):
-		BuildSource.__init__(self, on_use_variables = on_use_variables)
-
-	def __repr__(self):
-		return '%s(%s)' % (self.__class__.__name__, self.on_use_variables)
-
-
-def add_rule_vars(**kwargs):
-	variables = {}
-	for key, value in kwargs.items():
-		if value:
-			variables.setdefault(key, []).extend(ensure_list(value))
-	if variables:
-		return [RuleVariables(on_use_variables = {None: variables})]
-	return []
-
-
-class External(BuildSource):
-	def __init__(self, ctx, on_use_variables = None, rules = None, target_types_by_ext = None,
-			required_inputs_by_target_type = None):
-		assert(ctx)
-		self.name = self.__class__.name
-		BuildSource.__init__(self, on_use_variables = on_use_variables)
-		self.rules = (rules or [])
-		self.target_types_by_ext = (target_types_by_ext or {})
-		self.required_inputs_by_target_type = (required_inputs_by_target_type or {})
-
-	def _check_version(self, version_req, version_str):
-		self.version = Version(version_str)
-		if version_req and not version_req(self.version):
-			raise VersionError('Unable to find correct version!')
-
-	def __repr__(self):
-		try:
-			return '%s(%s)' % (self.__class__.__name__, self.version)
-		except Exception:
-			return self.__class__.__name__
-External.available = {}
-
-
-def register_external(ext, *names):
-	ext.name = names[0]
-	for name in names:
-		External.available[name] = ext
-
-
-class External_linker(External):
-	def __init__(self, ctx,
-			link_static, link_static_opts, link_static_def, link_static_opts_def,
-			link_shared, link_shared_opts, link_shared_def, link_shared_opts_def,
-			link_exe, link_exe_opts, link_exe_def, link_exe_opts_def):
-		link_static = (link_static or link_static_def)
-		link_static_opts = (link_static_opts or link_static_opts_def)
-		link_shared = (link_shared or link_shared_def)
-		link_shared_opts = (link_shared_opts or link_shared_opts_def)
-		link_exe = (link_exe or link_exe_def)
-		link_exe_opts = (link_exe_opts or link_exe_opts_def)
-		External.__init__(self, ctx,
-			rules = [
-				Rule(('object', 'static'), 'link_static',
-					'rm -f $out && $LINKER_STATIC $LINKER_STATIC_FLAGS ${opts} $out $in', 'link(static) $out',
-					{'LINKER_STATIC': link_static, 'LINKER_STATIC_FLAGS': link_static_opts}),
-				Rule(('object', 'shared'), 'link_shared',
-					'$LINKER_SHARED $LINKER_SHARED_FLAGS ${opts} -o $out $in', 'link(shared) $out',
-					{'LINKER_SHARED': link_shared, 'LINKER_SHARED_FLAGS': link_shared_opts}),
-				Rule(('object', 'exe'), 'link_exe',
-					'$LINKER_EXE $LINKER_EXE_FLAGS ${opts} -o $out $in', 'link(exe) $out',
-					{'LINKER_EXE': link_exe, 'LINKER_EXE_FLAGS': link_exe_opts})])
-
-
-class External_link_base(External_linker):
-	def __init__(self, ctx, link_static = None, link_static_opts = None,
-			link_shared = None, link_shared_opts = None,
-			link_exe = None, link_exe_opts = None):
-		External_linker.__init__(self, ctx,
-			link_static = link_static, link_static_opts = link_static_opts,
-			link_static_def = 'ar', link_static_opts_def = 'rcs',
-			link_shared = link_shared, link_shared_opts = link_shared_opts,
-			link_shared_def = 'ld', link_shared_opts_def = '-shared -fPIC',
-			link_exe = link_exe, link_exe_opts = link_exe_opts,
-			link_exe_def = 'ld', link_exe_opts_def = '')
-register_external(External_link_base, 'link-base')
-
-
-class External_link_gcc(External_linker):
-	def __init__(self, ctx, link_static = None, link_static_opts = None,
-			link_shared = None, link_shared_opts = None,
-			link_exe = None, link_exe_opts = None):
-		External_linker.__init__(self, ctx,
-			link_static = link_static, link_static_opts = link_static_opts,
-			link_static_def = 'gcc-ar', link_static_opts_def = 'rcs',
-			link_shared = link_shared, link_shared_opts = link_shared_opts,
-			link_shared_def = 'gcc', link_shared_opts_def = '-shared -fPIC',
-			link_exe = link_exe, link_exe_opts = link_exe_opts,
-			link_exe_def = 'gcc', link_exe_opts_def = '')
-register_external(External_link_gcc, 'link-gcc')
-
-
-class External_link_llvm(External_linker):
-	def __init__(self, ctx, link_static = None, link_static_opts = None,
-			link_shared = None, link_shared_opts = None,
-			link_exe = None, link_exe_opts = None):
-		External_linker.__init__(self, ctx,
-			link_static = link_static, link_static_opts = link_static_opts,
-			link_static_def = 'llvm-ar', link_static_opts_def = 'rcs',
-			link_shared = link_shared, link_shared_opts = link_shared_opts,
-			link_shared_def = 'clang', link_shared_opts_def = '-shared -fPIC',
-			link_exe = link_exe, link_exe_opts = link_exe_opts,
-			link_exe_def = 'clang', link_exe_opts_def = '')
-register_external(External_link_llvm, 'link-llvm')
-
-
-class External_SimpleCompiler(External): # C family compiler
-	std = property(lambda self: self._std, lambda self, value: self._set_std(value))
-
-	def __init__(self, ctx, lang, std, compiler, compiler_opts, var_prefix, ext_list, req_input = None):
-		self._std = None
-		self._var_prefix = var_prefix
-		self._compiler_opts = compiler_opts
-		self._compiler_variables = {var_prefix: compiler, var_prefix + '_FLAGS': self._compiler_opts}
-		required_inputs_by_target_type = {
-			'linux': {'shared': [RuleVariables({'compile_' + lang: {'opts': ['-fPIC']}})]},
-		}
-		if req_input:
-			for platform in required_inputs_by_target_type:
-				for target_type in req_input:
-					required_inputs_by_target_type[platform].setdefault(target_type, []).extend(req_input[target_type])
-		External.__init__(self, ctx, rules = [
-				Rule((lang, 'object'), 'compile_' + lang,
-					'$%s $%s_FLAGS ${opts} -MMD -MT $out -MF $out.d -c $in -o $out' % (var_prefix, var_prefix),
-					'compile(%s) $out' % lang, self._compiler_variables,
-					depfile = '$out.d', deps = 'gcc'),
-				Rule((lang, 'exe'), 'compile_link_exe_' + lang,
-					'$%s $%s_FLAGS ${opts} -MMD -MT $out -MF $out.d $in -o $out' % (var_prefix, var_prefix),
-					'compile+link(%s) $out' % lang, self._compiler_variables,
-					depfile = '$out.d', deps = 'gcc'),
-				Rule((lang, 'shared'), 'compile_link_shared_' + lang,
-					'$%s $%s_FLAGS ${opts} -shared -fPIC -MMD -MT $out -MF $out.d $in -o $out' % (var_prefix, var_prefix),
-					'compile+link(%s) $out' % lang, self._compiler_variables,
-					depfile = '$out.d', deps = 'gcc'),
-			],
-			target_types_by_ext = dict.fromkeys(ext_list, lang),
-			required_inputs_by_target_type = required_inputs_by_target_type)
-		self._set_std(std)
-
-	def _find_latest(self, vcmp_list, default = None):
-		for (vcmp, result) in vcmp_list:
-			if vcmp(self.version):
-				return result
-		return default
-
-	def get_latest(self):
-		raise Exception('%s: Unable to find latest language standard!' % self.__class__.__name__)
-
-	def _set_std(self, value):
-		if value == 'latest':
-			value = self.get_latest()
-		self._std = value
-		if not value:
-			opts = self._compiler_opts
-		else:
-			opts = ('-std=%s ' % value) + self._compiler_opts
-		self._compiler_variables[self._var_prefix + '_FLAGS'] = opts
-
-
-class External_gcc(External_SimpleCompiler):
-	def __init__(self, ctx, version = None, std = None, compiler = None, compiler_opts = None, ext_list = None):
-		compiler = (compiler or 'gcc')
-		compiler_opts = (compiler_opts or '-Wall -pedantic')
-		ext_list = (ext_list or ['.c'])
-		self._check_version(version, run_process([compiler, '--version'])[0].splitlines()[0].split()[-1])
-		External_SimpleCompiler.__init__(self, ctx, std = std, lang = 'c',
-			compiler = compiler, compiler_opts = compiler_opts, var_prefix = 'CC', ext_list = ext_list)
-register_external(External_gcc, 'gcc')
-
-
-class External_gpp(External_SimpleCompiler):
-	def __init__(self, ctx, version = None, std = None, compiler = None, compiler_opts = None, ext_list = None):
-		compiler = (compiler or 'g++')
-		compiler_opts = (compiler_opts or '-Wall -pedantic')
-		ext_list = (ext_list or ['.cpp', '.cxx', '.cc'])
-		self._check_version(version, run_process([compiler, '--version'])[0].splitlines()[0].split()[-1])
-		External_SimpleCompiler.__init__(self, ctx, std = std, lang = 'cpp',
-			compiler = compiler, compiler_opts = compiler_opts,
-			var_prefix = 'CXX', ext_list = ext_list, req_input = {
-				'exe': [External_libstdcpp(ctx)], 'shared': [External_libstdcpp(ctx)],
-				'static': [External_libstdcpp(ctx)]})
-
-	def get_latest(self):
-		return self._find_latest([
-			(ver < '4.3', 'c++03'),
-			(ver < '4.7', 'c++0x'),
-			(ver < '4.8', 'c++11'),
-			(ver < '5.0', 'c++14')],
-			'c++1z')
-register_external(External_gpp, 'g++', 'gpp')
-
-
-class External_gfortran(External_SimpleCompiler):
-	def __init__(self, ctx, version = None, std = None, compiler = None, compiler_opts = None, ext_list = None):
-		compiler = (compiler or 'gfortran')
-		compiler_opts = (compiler_opts or '-Wall')
-		ext_list = (ext_list or ['.f'])
-		self._check_version(version, run_process([compiler, '--version'])[0].splitlines()[0].split()[-1])
-		External_SimpleCompiler.__init__(self, ctx, std = std, lang = 'fortran',
-			compiler = compiler, compiler_opts = compiler_opts, var_prefix = 'F', ext_list = ext_list)
-register_external(External_gfortran, 'gfortran')
-
-
-class External_clang(External_SimpleCompiler):
-	def __init__(self, ctx, version = None, std = None, compiler = None, compiler_opts = None, ext_list = None):
-		compiler = (compiler or 'clang')
-		compiler_opts = (compiler_opts or '-Weverything -Wno-padded')
-		ext_list = (ext_list or ['.c'])
-		self._check_version(version, run_process([compiler, '--version'])[0].splitlines()[0].split()[2])
-		External_SimpleCompiler.__init__(self, ctx, std = std, lang = 'c',
-			compiler = compiler, compiler_opts = compiler_opts, var_prefix = 'CC', ext_list = ext_list)
-register_external(External_clang, 'clang')
-
-
-class External_clangpp(External_SimpleCompiler):
-	def __init__(self, ctx, version = None, std = None, compiler = None, compiler_opts = None, ext_list = None):
-		compiler = (compiler or 'clang++')
-		compiler_opts = (compiler_opts or '-Weverything -Wno-padded')
-		ext_list = (ext_list or ['.cpp', '.cxx', '.cc'])
-		self._check_version(version, run_process([compiler, '--version'])[0].splitlines()[0].split()[2])
-		External_SimpleCompiler.__init__(self, ctx, std = std, lang = 'cpp',
-			compiler = compiler, compiler_opts = compiler_opts,
-			var_prefix = 'CXX', ext_list = ext_list, req_input = {
-				'exe': [External_libstdcpp(ctx)], 'shared': [External_libstdcpp(ctx)],
-				'static': [External_libstdcpp(ctx)]})
-
-	def get_latest(self):
-		return self._find_latest([
-			(ver >= '3.5', 'c++1z'),
-			(ver < '3.4', 'c++14'),
-			(ver < '3.3', 'c++11')])
-register_external(External_clangpp, 'clang++', 'clangpp')
-
-
-class External_SWIG(External):
-	def __init__(self, ctx, version = None):
-		version_str = ''
-		for version_line in run_process(['swig', '-version'])[0].splitlines():
-			if 'version' in version_line.lower():
-				version_str = version_line.split()[-1]
-				break
-		self._check_version(version, version_str)
-		External.__init__(self, ctx)
-		self._ctx = ctx
-
-	def wrapper(self, lang, name, ifile, libs = None, swig_opts = None, context = None, **kwargs):
-		if context is None:
-			context = self._ctx
-		wrapper_ext = context.find_external(lang)
-		swig_rule = Rule(('swig', 'c++'), 'swig_cpp_%s' % lang,
-			'swig -c++ -%s -I. ${opts} -module ${module_name} -o $out $in' % lang,
-			'swig(C++ -> %s) $out' % lang, {})
-		wrapper_src = BuildTarget(get_normed_name(name, '.cpp'), swig_rule,
-			[InputFile(ifile)] + add_rule_vars(opts = swig_opts, module_name = name),
-			on_use_inputs = {None: [SelfReference()]},
-			on_use_variables = wrapper_ext.on_use_variables, target_type = 'cpp')
-		return context.shared_library('_' + name, [wrapper_src, wrapper_ext] + (libs or []), **kwargs)
-register_external(External_SWIG, 'swig')
-
-
-class SimpleExternal(External):
-	def __init__(self, ctx, **kwargs):
-		link_opts = ensure_list(kwargs.pop('link', []))
-		if link_opts:
-			kwargs['link_static'] = link_opts
-			kwargs['link_shared'] = link_opts
-			kwargs['link_exe'] = link_opts
-		on_use_variables = {}
-		for rule_name, opts in kwargs.items():
-			on_use_variables.setdefault(rule_name, {})['opts'] = ensure_list(opts)
-		External.__init__(self, ctx, on_use_variables = on_use_variables)
-
-
-class External_pthread(SimpleExternal):
-	def __init__(self, ctx):
-		SimpleExternal.__init__(self, ctx, link = '-pthread', compile_cpp = '-pthread')
-register_external(External_pthread, 'pthread')
-
-
-class External_libstdcpp(SimpleExternal):
-	def __init__(self, ctx):
-		SimpleExternal.__init__(self, ctx, link_shared = '-lstdc++ -lm', link_exe = '-lstdc++ -lm')
-register_external(External_libstdcpp, 'libstdc++', 'libstdcpp')
-
-
-class External_libcpp(SimpleExternal):
-	def __init__(self, ctx):
-		SimpleExternal.__init__(self, ctx, link_shared = '-lc++ -lc++abi -lm', link_exe = '-lc++ -lc++abi -lm')
-register_external(External_libcpp, 'libc++', 'libcpp')
-
-
-class External_Python(SimpleExternal):
-	def __init__(self, ctx, version = None, build_helper = 'python-config'):
-		link_opts = run_process([build_helper, '--ldflags'])[0]
-		python_lib = list(filter(lambda entry: entry.startswith('-lpython'), link_opts.split()))
-		self._check_version(version, python_lib.pop().replace('-lpython', ''))
-		SimpleExternal.__init__(self, ctx, link = link_opts,
-			compile_cpp = run_process([build_helper, '--cflags'])[0])
-register_external(External_Python, 'python')
-
-
-def create_build_helper_external(name, build_helper, **kwargs):
-	version_query = kwargs.pop('version_query', None)
-	version_parser = kwargs.pop('version_parser', None)
-	if version_query:
-		class TempExternal(SimpleExternal):
-			def __init__(self, ctx, version = None):
-				version_str = run_process([build_helper] + version_query.split())[0]
-				if version_parser:
-					version_str = version_parser(version_str)
-				self._check_version(version, version_str)
-				for rule_name in list(kwargs.keys()):
-					kwargs[rule_name] = run_process([build_helper] + kwargs[rule_name].split())[0]
-				SimpleExternal.__init__(self, ctx, **kwargs)
-	else:
-		class TempExternal(SimpleExternal):
-			def __init__(self, ctx):
-				for rule_name in list(kwargs.keys()):
-					kwargs[rule_name] = run_process([build_helper] + kwargs[rule_name].split())[0]
-				SimpleExternal.__init__(self, ctx, **kwargs)
-	TempExternal.__name__ = 'External_' + name.replace('-', '_')
-	register_external(TempExternal, name)
-	return TempExternal
-
-
-def define_pkg_config_external(name):
-	try:
-		run_process(['pkg-config', name, '--exists'])
-	except ProcessError:
-		return
-	return create_build_helper_external(name, 'pkg-config',
-		version_query = '%s --modversion' % name,
-		link = '%s --libs' % name, compile_cpp = '%s --cflags' % name)
-
-
-def define_non_pkg_config_externals():
-	for (tool, ldopt, cxxopt) in [
-		('fltk-config',     '--ldflags', '--cxxflags'),
-		('llvm-config',     '--libs',    '--cppflags'),
-		('odbc_config',     '--libs',    '--cflags'),
-		('root-config',     '--libs',    '--cflags'),
-		('wx-config',       '--libs',    '--cxxflags'),
-	]:
-		create_build_helper_external(tool.split('-')[0].split('_')[0], tool,
-			link = ldopt, compile_cpp = cxxopt, version_query = '--version',
-			version_parser = lambda version_str: version_str.split()[-1])
-define_non_pkg_config_externals()
 
 
 def get_normed_name(fn, forced_ext):
@@ -882,35 +399,6 @@ class Registry(object):
 		self._fold_target_opts(targets_by_topts_by_rhash)
 		rule_order = self._process_rules(target_order)
 		return (sorted(rule_order, key = lambda r: r.name), target_order)
-
-
-class Platform(object):
-	def __init__(self, name, extensions, install_paths, rules):
-		(self.name, self.extensions, self.install_paths, self.rules) = (name, extensions, install_paths, rules)
-
-	def get_required_inputs(self, target_type, toolholder):
-		result = []
-		for tool in toolholder.get_tools():
-			result.extend(tool.required_inputs_by_target_type.get(self.name, {}).get(target_type, []))
-		return result
-
-	def __str__(self):
-		return nice_repr(self, 8)
-
-	def __repr__(self):
-		return '%s' % (self.__class__.__name__)
-
-
-class Platform_linux(Platform):
-	def __init__(self):
-		Platform.__init__(self, name = 'linux',
-			extensions = {'object': '.o', 'shared': '.so', 'static': '.a', 'exe': ''},
-			install_paths = {'shared': '/usr/lib', 'static': '/usr/lib', 'exe': '/usr/bin'},
-			rules = [
-				Rule(('exe', 'install'), 'install', 'cp $in $out', 'installing executable $out', {}),
-				Rule(('shared', 'install'), 'install_lib', 'cp $in $out', 'installing shared library $out', {}),
-				Rule(('static', 'install'), 'install_lib', 'cp $in $out', 'installing static library $out', {}),
-			])
 
 
 class Context(object):
@@ -1289,39 +777,6 @@ class ToolHolder(object):
 		return list(map(lambda name_tool: name_tool[1], sorted(self._tools.items())))
 
 
-class Toolchain(object):
-	def __init__(self, ctx):
-		self._ctx = ctx
-		self.tools = {}
-
-	def __repr__(self):
-		return nice_repr(self, 14)
-Toolchain.available = {}
-
-
-class Toolchain_GCC(Toolchain):
-	def __init__(self, ctx, version = None, c_std = None, c_opts = None, cpp_std = None, cpp_opts = None,
-			fortran_std = None, fortran_opts = None, link_shared_opts = None, link_exe_opts = None):
-		Toolchain.__init__(self, ctx)
-
-		self.tools['linker'] = Delayed(External_link_gcc, ctx, link_shared_opts = link_shared_opts, link_exe_opts = link_exe_opts)
-		self.tools['c'] = Delayed(External_gcc, ctx, version = version, std = c_std, compiler_opts = c_opts)
-		self.tools['cpp'] = Delayed(External_gpp, ctx, version = version, std = cpp_std, compiler_opts = cpp_opts)
-		self.tools['fortran'] = Delayed(External_gfortran, ctx, version = version, std = fortran_std, compiler_opts = fortran_opts)
-Toolchain.available['gcc'] = Toolchain_GCC
-
-
-class Toolchain_LLVM(Toolchain):
-	def __init__(self, ctx, version = None, c_std = None, c_opts = None, cpp_std = None, cpp_opts = None,
-			link_shared_opts = None, link_exe_opts = None):
-		Toolchain.__init__(self, ctx)
-
-		self.tools['linker'] = Delayed(External_link_llvm, ctx, link_shared_opts = link_shared_opts, link_exe_opts = link_exe_opts)
-		self.tools['c'] = Delayed(External_clang, ctx, version = version, std = c_std, compiler_opts = c_opts)
-		self.tools['cpp'] = Delayed(External_clangpp, ctx, version = version, std = cpp_std, compiler_opts = cpp_opts)
-Toolchain.available['llvm'] = Toolchain_LLVM
-
-
 def create_macro(expr):
 	rule_list = []
 	for lang in ['c', 'cpp']:
@@ -1463,6 +918,571 @@ def main():
 			sys.exit(os.EX_OK)
 
 	generate_build_file(bfn, args.output, args.makefile)
+
+################################################################################
+# Externals + helper functions
+################################################################################
+
+class External(BuildSource):
+	def __init__(self, ctx, on_use_variables = None, rules = None, target_types_by_ext = None,
+			required_inputs_by_target_type = None):
+		assert(ctx)
+		self.name = self.__class__.name
+		BuildSource.__init__(self, on_use_variables = on_use_variables)
+		self.rules = (rules or [])
+		self.target_types_by_ext = (target_types_by_ext or {})
+		self.required_inputs_by_target_type = (required_inputs_by_target_type or {})
+
+	def _check_version(self, version_req, version_str):
+		self.version = Version(version_str)
+		if version_req and not version_req(self.version):
+			raise VersionError('Unable to find correct version!')
+
+	def __repr__(self):
+		try:
+			return '%s(%s)' % (self.__class__.__name__, self.version)
+		except Exception:
+			return self.__class__.__name__
+
+	def register_external(cls, *names):
+		cls.name = names[0]
+		for name in names:
+			External.available[name] = cls
+	register_external = classmethod(register_external)
+External.available = {}
+
+
+class External_linker(External):
+	def __init__(self, ctx,
+			link_static, link_static_opts, link_static_def, link_static_opts_def,
+			link_shared, link_shared_opts, link_shared_def, link_shared_opts_def,
+			link_exe, link_exe_opts, link_exe_def, link_exe_opts_def):
+		link_static = (link_static or link_static_def)
+		link_static_opts = (link_static_opts or link_static_opts_def)
+		link_shared = (link_shared or link_shared_def)
+		link_shared_opts = (link_shared_opts or link_shared_opts_def)
+		link_exe = (link_exe or link_exe_def)
+		link_exe_opts = (link_exe_opts or link_exe_opts_def)
+		External.__init__(self, ctx,
+			rules = [
+				Rule(('object', 'static'), 'link_static',
+					'rm -f $out && $LINKER_STATIC $LINKER_STATIC_FLAGS ${opts} $out $in', 'link(static) $out',
+					{'LINKER_STATIC': link_static, 'LINKER_STATIC_FLAGS': link_static_opts}),
+				Rule(('object', 'shared'), 'link_shared',
+					'$LINKER_SHARED $LINKER_SHARED_FLAGS ${opts} -o $out $in', 'link(shared) $out',
+					{'LINKER_SHARED': link_shared, 'LINKER_SHARED_FLAGS': link_shared_opts}),
+				Rule(('object', 'exe'), 'link_exe',
+					'$LINKER_EXE $LINKER_EXE_FLAGS ${opts} -o $out $in', 'link(exe) $out',
+					{'LINKER_EXE': link_exe, 'LINKER_EXE_FLAGS': link_exe_opts})])
+
+
+class External_link_base(External_linker):
+	def __init__(self, ctx, link_static = None, link_static_opts = None,
+			link_shared = None, link_shared_opts = None,
+			link_exe = None, link_exe_opts = None):
+		External_linker.__init__(self, ctx,
+			link_static = link_static, link_static_opts = link_static_opts,
+			link_static_def = 'ar', link_static_opts_def = 'rcs',
+			link_shared = link_shared, link_shared_opts = link_shared_opts,
+			link_shared_def = 'ld', link_shared_opts_def = '-shared -fPIC',
+			link_exe = link_exe, link_exe_opts = link_exe_opts,
+			link_exe_def = 'ld', link_exe_opts_def = '')
+External_link_base.register_external('link-base')
+
+
+class External_link_gcc(External_linker):
+	def __init__(self, ctx, link_static = None, link_static_opts = None,
+			link_shared = None, link_shared_opts = None,
+			link_exe = None, link_exe_opts = None):
+		External_linker.__init__(self, ctx,
+			link_static = link_static, link_static_opts = link_static_opts,
+			link_static_def = 'gcc-ar', link_static_opts_def = 'rcs',
+			link_shared = link_shared, link_shared_opts = link_shared_opts,
+			link_shared_def = 'gcc', link_shared_opts_def = '-shared -fPIC',
+			link_exe = link_exe, link_exe_opts = link_exe_opts,
+			link_exe_def = 'gcc', link_exe_opts_def = '')
+External_link_gcc.register_external('link-gcc')
+
+
+class External_link_llvm(External_linker):
+	def __init__(self, ctx, link_static = None, link_static_opts = None,
+			link_shared = None, link_shared_opts = None,
+			link_exe = None, link_exe_opts = None):
+		External_linker.__init__(self, ctx,
+			link_static = link_static, link_static_opts = link_static_opts,
+			link_static_def = 'llvm-ar', link_static_opts_def = 'rcs',
+			link_shared = link_shared, link_shared_opts = link_shared_opts,
+			link_shared_def = 'clang', link_shared_opts_def = '-shared -fPIC',
+			link_exe = link_exe, link_exe_opts = link_exe_opts,
+			link_exe_def = 'clang', link_exe_opts_def = '')
+External_link_llvm.register_external('link-llvm')
+
+
+class External_SimpleCompiler(External): # C family compiler
+	std = property(lambda self: self._std, lambda self, value: self._set_std(value))
+
+	def __init__(self, ctx, lang, std, compiler, compiler_opts, var_prefix, ext_list, req_input = None):
+		self._std = None
+		self._var_prefix = var_prefix
+		self._compiler_opts = compiler_opts
+		self._compiler_variables = {var_prefix: compiler, var_prefix + '_FLAGS': self._compiler_opts}
+		required_inputs_by_target_type = {
+			'linux': {'shared': [RuleVariables({'compile_' + lang: {'opts': ['-fPIC']}})]},
+		}
+		if req_input:
+			for platform in required_inputs_by_target_type:
+				for target_type in req_input:
+					required_inputs_by_target_type[platform].setdefault(target_type, []).extend(req_input[target_type])
+		External.__init__(self, ctx, rules = [
+				Rule((lang, 'object'), 'compile_' + lang,
+					'$%s $%s_FLAGS ${opts} -MMD -MT $out -MF $out.d -c $in -o $out' % (var_prefix, var_prefix),
+					'compile(%s) $out' % lang, self._compiler_variables,
+					depfile = '$out.d', deps = 'gcc'),
+				Rule((lang, 'exe'), 'compile_link_exe_' + lang,
+					'$%s $%s_FLAGS ${opts} -MMD -MT $out -MF $out.d $in -o $out' % (var_prefix, var_prefix),
+					'compile+link(%s) $out' % lang, self._compiler_variables,
+					depfile = '$out.d', deps = 'gcc'),
+				Rule((lang, 'shared'), 'compile_link_shared_' + lang,
+					'$%s $%s_FLAGS ${opts} -shared -fPIC -MMD -MT $out -MF $out.d $in -o $out' % (var_prefix, var_prefix),
+					'compile+link(%s) $out' % lang, self._compiler_variables,
+					depfile = '$out.d', deps = 'gcc'),
+			],
+			target_types_by_ext = dict.fromkeys(ext_list, lang),
+			required_inputs_by_target_type = required_inputs_by_target_type)
+		self._set_std(std)
+
+	def _find_latest(self, vcmp_list, default = None):
+		for (vcmp, result) in vcmp_list:
+			if vcmp(self.version):
+				return result
+		return default
+
+	def get_latest(self):
+		raise Exception('%s: Unable to find latest language standard!' % self.__class__.__name__)
+
+	def _set_std(self, value):
+		if value == 'latest':
+			value = self.get_latest()
+		self._std = value
+		if not value:
+			opts = self._compiler_opts
+		else:
+			opts = ('-std=%s ' % value) + self._compiler_opts
+		self._compiler_variables[self._var_prefix + '_FLAGS'] = opts
+
+
+class External_gcc(External_SimpleCompiler):
+	def __init__(self, ctx, version = None, std = None, compiler = None, compiler_opts = None, ext_list = None):
+		compiler = (compiler or 'gcc')
+		compiler_opts = (compiler_opts or '-Wall -pedantic')
+		ext_list = (ext_list or ['.c'])
+		self._check_version(version, run_process([compiler, '--version'])[0].splitlines()[0].split()[-1])
+		External_SimpleCompiler.__init__(self, ctx, std = std, lang = 'c',
+			compiler = compiler, compiler_opts = compiler_opts, var_prefix = 'CC', ext_list = ext_list)
+External_gcc.register_external('gcc')
+
+
+class External_gpp(External_SimpleCompiler):
+	def __init__(self, ctx, version = None, std = None, compiler = None, compiler_opts = None, ext_list = None):
+		compiler = (compiler or 'g++')
+		compiler_opts = (compiler_opts or '-Wall -pedantic')
+		ext_list = (ext_list or ['.cpp', '.cxx', '.cc'])
+		self._check_version(version, run_process([compiler, '--version'])[0].splitlines()[0].split()[-1])
+		External_SimpleCompiler.__init__(self, ctx, std = std, lang = 'cpp',
+			compiler = compiler, compiler_opts = compiler_opts,
+			var_prefix = 'CXX', ext_list = ext_list, req_input = {
+				'exe': [External_libstdcpp(ctx)], 'shared': [External_libstdcpp(ctx)],
+				'static': [External_libstdcpp(ctx)]})
+
+	def get_latest(self):
+		return self._find_latest([
+			(ver < '4.3', 'c++03'),
+			(ver < '4.7', 'c++0x'),
+			(ver < '4.8', 'c++11'),
+			(ver < '5.0', 'c++14')],
+			'c++1z')
+External_gpp.register_external('g++', 'gpp')
+
+
+class External_gfortran(External_SimpleCompiler):
+	def __init__(self, ctx, version = None, std = None, compiler = None, compiler_opts = None, ext_list = None):
+		compiler = (compiler or 'gfortran')
+		compiler_opts = (compiler_opts or '-Wall')
+		ext_list = (ext_list or ['.f'])
+		self._check_version(version, run_process([compiler, '--version'])[0].splitlines()[0].split()[-1])
+		External_SimpleCompiler.__init__(self, ctx, std = std, lang = 'fortran',
+			compiler = compiler, compiler_opts = compiler_opts, var_prefix = 'F', ext_list = ext_list)
+External_gfortran.register_external('gfortran')
+
+
+class External_clang(External_SimpleCompiler):
+	def __init__(self, ctx, version = None, std = None, compiler = None, compiler_opts = None, ext_list = None):
+		compiler = (compiler or 'clang')
+		compiler_opts = (compiler_opts or '-Weverything -Wno-padded')
+		ext_list = (ext_list or ['.c'])
+		self._check_version(version, run_process([compiler, '--version'])[0].splitlines()[0].split()[2])
+		External_SimpleCompiler.__init__(self, ctx, std = std, lang = 'c',
+			compiler = compiler, compiler_opts = compiler_opts, var_prefix = 'CC', ext_list = ext_list)
+External_clang.register_external('clang')
+
+
+class External_clangpp(External_SimpleCompiler):
+	def __init__(self, ctx, version = None, std = None, compiler = None, compiler_opts = None, ext_list = None):
+		compiler = (compiler or 'clang++')
+		compiler_opts = (compiler_opts or '-Weverything -Wno-padded')
+		ext_list = (ext_list or ['.cpp', '.cxx', '.cc'])
+		self._check_version(version, run_process([compiler, '--version'])[0].splitlines()[0].split()[2])
+		External_SimpleCompiler.__init__(self, ctx, std = std, lang = 'cpp',
+			compiler = compiler, compiler_opts = compiler_opts,
+			var_prefix = 'CXX', ext_list = ext_list, req_input = {
+				'exe': [External_libstdcpp(ctx)], 'shared': [External_libstdcpp(ctx)],
+				'static': [External_libstdcpp(ctx)]})
+
+	def get_latest(self):
+		return self._find_latest([
+			(ver >= '3.5', 'c++1z'),
+			(ver < '3.4', 'c++14'),
+			(ver < '3.3', 'c++11')])
+External_clangpp.register_external('clang++', 'clangpp')
+
+
+class External_SWIG(External):
+	def __init__(self, ctx, version = None):
+		version_str = ''
+		for version_line in run_process(['swig', '-version'])[0].splitlines():
+			if 'version' in version_line.lower():
+				version_str = version_line.split()[-1]
+				break
+		self._check_version(version, version_str)
+		External.__init__(self, ctx)
+		self._ctx = ctx
+
+	def wrapper(self, lang, name, ifile, libs = None, swig_opts = None, context = None, **kwargs):
+		if context is None:
+			context = self._ctx
+		wrapper_ext = context.find_external(lang)
+		swig_rule = Rule(('swig', 'c++'), 'swig_cpp_%s' % lang,
+			'swig -c++ -%s -I. ${opts} -module ${module_name} -o $out $in' % lang,
+			'swig(C++ -> %s) $out' % lang, {})
+		wrapper_src = BuildTarget(get_normed_name(name, '.cpp'), swig_rule,
+			[InputFile(ifile)] + add_rule_vars(opts = swig_opts, module_name = name),
+			on_use_inputs = {None: [SelfReference()]},
+			on_use_variables = wrapper_ext.on_use_variables, target_type = 'cpp')
+		return context.shared_library('_' + name, [wrapper_src, wrapper_ext] + (libs or []), **kwargs)
+External_SWIG.register_external('swig')
+
+
+class SimpleExternal(External):
+	def __init__(self, ctx, **kwargs):
+		link_opts = ensure_list(kwargs.pop('link', []))
+		if link_opts:
+			kwargs['link_static'] = link_opts
+			kwargs['link_shared'] = link_opts
+			kwargs['link_exe'] = link_opts
+		on_use_variables = {}
+		for rule_name, opts in kwargs.items():
+			on_use_variables.setdefault(rule_name, {})['opts'] = ensure_list(opts)
+		External.__init__(self, ctx, on_use_variables = on_use_variables)
+
+
+class External_pthread(SimpleExternal):
+	def __init__(self, ctx):
+		SimpleExternal.__init__(self, ctx, link = '-pthread', compile_cpp = '-pthread')
+External_pthread.register_external('pthread')
+
+
+class External_libstdcpp(SimpleExternal):
+	def __init__(self, ctx):
+		SimpleExternal.__init__(self, ctx, link_shared = '-lstdc++ -lm', link_exe = '-lstdc++ -lm')
+External_libstdcpp.register_external('libstdc++', 'libstdcpp')
+
+
+class External_libcpp(SimpleExternal):
+	def __init__(self, ctx):
+		SimpleExternal.__init__(self, ctx, link_shared = '-lc++ -lc++abi -lm', link_exe = '-lc++ -lc++abi -lm')
+External_libcpp.register_external('libc++', 'libcpp')
+
+
+class External_Python(SimpleExternal):
+	def __init__(self, ctx, version = None, build_helper = 'python-config'):
+		link_opts = run_process([build_helper, '--ldflags'])[0]
+		python_lib = list(filter(lambda entry: entry.startswith('-lpython'), link_opts.split()))
+		self._check_version(version, python_lib.pop().replace('-lpython', ''))
+		SimpleExternal.__init__(self, ctx, link = link_opts,
+			compile_cpp = run_process([build_helper, '--cflags'])[0])
+External_Python.register_external('python')
+
+
+def create_build_helper_external(name, build_helper, **kwargs):
+	version_query = kwargs.pop('version_query', None)
+	version_parser = kwargs.pop('version_parser', None)
+	if version_query:
+		class TempExternal(SimpleExternal):
+			def __init__(self, ctx, version = None):
+				version_str = run_process([build_helper] + version_query.split())[0]
+				if version_parser:
+					version_str = version_parser(version_str)
+				self._check_version(version, version_str)
+				for rule_name in list(kwargs.keys()):
+					kwargs[rule_name] = run_process([build_helper] + kwargs[rule_name].split())[0]
+				SimpleExternal.__init__(self, ctx, **kwargs)
+	else:
+		class TempExternal(SimpleExternal):
+			def __init__(self, ctx):
+				for rule_name in list(kwargs.keys()):
+					kwargs[rule_name] = run_process([build_helper] + kwargs[rule_name].split())[0]
+				SimpleExternal.__init__(self, ctx, **kwargs)
+	TempExternal.__name__ = 'External_' + name.replace('-', '_')
+	TempExternal.register_external(name)
+	return TempExternal
+
+
+def define_pkg_config_external(name):
+	try:
+		run_process(['pkg-config', name, '--exists'])
+	except ProcessError:
+		return
+	return create_build_helper_external(name, 'pkg-config',
+		version_query = '%s --modversion' % name,
+		link = '%s --libs' % name, compile_cpp = '%s --cflags' % name)
+
+
+def define_non_pkg_config_externals():
+	for (tool, ldopt, cxxopt) in [
+		('fltk-config',     '--ldflags', '--cxxflags'),
+		('llvm-config',     '--libs',    '--cppflags'),
+		('odbc_config',     '--libs',    '--cflags'),
+		('root-config',     '--libs',    '--cflags'),
+		('wx-config',       '--libs',    '--cxxflags'),
+	]:
+		create_build_helper_external(tool.split('-')[0].split('_')[0], tool,
+			link = ldopt, compile_cpp = cxxopt, version_query = '--version',
+			version_parser = lambda version_str: version_str.split()[-1])
+define_non_pkg_config_externals()
+
+################################################################################
+# Toolchains + helper functions
+################################################################################
+
+class Toolchain(object):
+	def __init__(self, ctx):
+		self._ctx = ctx
+		self.tools = {}
+
+	def __repr__(self):
+		return nice_repr(self, 14)
+Toolchain.available = {}
+
+
+class Toolchain_GCC(Toolchain):
+	def __init__(self, ctx, version = None, c_std = None, c_opts = None, cpp_std = None, cpp_opts = None,
+			fortran_std = None, fortran_opts = None, link_shared_opts = None, link_exe_opts = None):
+		Toolchain.__init__(self, ctx)
+
+		self.tools['linker'] = Delayed(External_link_gcc, ctx, link_shared_opts = link_shared_opts, link_exe_opts = link_exe_opts)
+		self.tools['c'] = Delayed(External_gcc, ctx, version = version, std = c_std, compiler_opts = c_opts)
+		self.tools['cpp'] = Delayed(External_gpp, ctx, version = version, std = cpp_std, compiler_opts = cpp_opts)
+		self.tools['fortran'] = Delayed(External_gfortran, ctx, version = version, std = fortran_std, compiler_opts = fortran_opts)
+Toolchain.available['gcc'] = Toolchain_GCC
+
+
+class Toolchain_LLVM(Toolchain):
+	def __init__(self, ctx, version = None, c_std = None, c_opts = None, cpp_std = None, cpp_opts = None,
+			link_shared_opts = None, link_exe_opts = None):
+		Toolchain.__init__(self, ctx)
+
+		self.tools['linker'] = Delayed(External_link_llvm, ctx, link_shared_opts = link_shared_opts, link_exe_opts = link_exe_opts)
+		self.tools['c'] = Delayed(External_clang, ctx, version = version, std = c_std, compiler_opts = c_opts)
+		self.tools['cpp'] = Delayed(External_clangpp, ctx, version = version, std = cpp_std, compiler_opts = cpp_opts)
+Toolchain.available['llvm'] = Toolchain_LLVM
+
+################################################################################
+# Platforms
+################################################################################
+
+class Platform(object):
+	def __init__(self, name, extensions, install_paths, rules):
+		(self.name, self.extensions, self.install_paths, self.rules) = (name, extensions, install_paths, rules)
+
+	def get_required_inputs(self, target_type, toolholder):
+		result = []
+		for tool in toolholder.get_tools():
+			result.extend(tool.required_inputs_by_target_type.get(self.name, {}).get(target_type, []))
+		return result
+
+	def __str__(self):
+		return nice_repr(self, 8)
+
+	def __repr__(self):
+		return '%s' % (self.__class__.__name__)
+
+
+class Platform_linux(Platform):
+	def __init__(self):
+		Platform.__init__(self, name = 'linux',
+			extensions = {'object': '.o', 'shared': '.so', 'static': '.a', 'exe': ''},
+			install_paths = {'shared': '/usr/lib', 'static': '/usr/lib', 'exe': '/usr/bin'},
+			rules = [
+				Rule(('exe', 'install'), 'install', 'cp $in $out', 'installing executable $out', {}),
+				Rule(('shared', 'install'), 'install_lib', 'cp $in $out', 'installing shared library $out', {}),
+				Rule(('static', 'install'), 'install_lib', 'cp $in $out', 'installing static library $out', {}),
+			])
+
+################################################################################
+# Build file writer
+################################################################################
+
+class BuildFileWriter(object):
+	def __init__(self, fn, default_fn):
+		if fn is None:
+			fn = default_fn
+		self._fn = fn
+		self._fp = open(self._fn, 'w')
+BuildFileWriter.available = {}
+
+
+class NinjaBuildFileWriter(BuildFileWriter):
+	def __init__(self, fn = None):
+		BuildFileWriter.__init__(self, fn, 'build.ninja')
+		self._vars = {}
+	def _write_var(self, key, value):
+		if self._vars.get(key) != value:
+			self._fp.write('%s = %s\n' % (key, value.strip()))
+		self._vars[key] = value
+	def write_default(self, default_targets):
+		if (len(default_targets) == 1) and (default_targets[0].name == 'all'):
+			return
+		self._fp.write('default %s\n' % str.join(' ', map(lambda t: t.name, default_targets)))
+	def write_rule(self, rule):
+		for key, value in sorted(rule.defaults.items()):
+			self._write_var(key, value)
+		self._fp.write('rule %s\n' % rule.name)
+		self._fp.write('  command = %s\n' % rule.cmd)
+		self._fp.write('  description = %s\n' % rule.desc)
+		for key_value in rule.params:
+			self._fp.write('  %s = %s\n' % key_value)
+		self._fp.write('\n')
+	def write_target(self, target):
+		inputs = str.join(' ', map(lambda t: t.name, target.get_build_inputs()))
+		self._fp.write('build %s: %s %s' % (target.name, target.build_rule.name, inputs))
+		if target.get_build_deps():
+			self._fp.write(' | %s' % str.join(' ', map(lambda t: t.name, target.get_build_deps())))
+		self._fp.write('\n')
+		for key_value in sorted(target.get_build_variables().items()):
+			self._fp.write('  %s = %s\n' % key_value)
+BuildFileWriter.available['ninja'] = NinjaBuildFileWriter
+
+
+class MakefileWriter(BuildFileWriter):
+	def __init__(self, fn = None):
+		BuildFileWriter.__init__(self, fn, 'Makefile')
+		self._vars = set()
+	def _write_var(self, key, value):
+		self._fp.write('%s := %s\n' % (key, value.strip()))
+	def write_default(self, default_targets):
+		default = default_targets[0].name
+		if len(default_targets) > 1:
+			default = 'default_target'
+			self._fp.write('%s: %s\n' % (default, str.join(' ', map(lambda t: t.name, default_targets))))
+			self._fp.write('.PHONY: %s\n' % default)
+		self._fp.write('.DEFAULT_GOAL := %s\n' % default)
+	def write_rule(self, rule):
+		for key, value in sorted(rule.defaults.items()):
+			self._write_var(key, value)
+		self._fp.write('\n')
+	def write_target(self, target):
+		def replace_var(value, var_name, var_value):
+			return value.replace('$%s' % var_name, var_value).replace('${%s}' % var_name, var_value)
+		def replace_var_ref(value, var_name, new_var_name):
+			return replace_var(value, var_name, '$(%s)' % new_var_name)
+
+		variables = target.get_build_variables()
+		for opt, opt_value in sorted(variables.items()):
+			opt_hash = calc_hash([opt, opt_value])
+			if opt_hash not in self._vars:
+				self._vars.add(opt_hash)
+				self._write_var(opt + '_' + opt_hash, opt_value)
+		inputs = list(map(lambda t: t.name, target.get_build_inputs()))
+		deps = inputs + list(map(lambda t: t.name, target.get_build_deps()))
+		rule_params = dict(target.build_rule.params)
+		if rule_params.get('deps') == 'gcc':
+			depfile = replace_var(rule_params['depfile'], 'out', target.name)
+			self._fp.write('-include %s\n' % depfile)
+		self._fp.write('%s: %s\n' % (target.name, str.join(' ', deps)))
+		cmd = replace_var(replace_var(target.build_rule.cmd, 'out', target.name), 'in', str.join(' ', inputs))
+		for opt in sorted(target.build_rule.defaults.keys(), key = len, reverse = True):
+			cmd = replace_var_ref(cmd, opt, opt)
+		for opt in sorted(variables.keys(), key = len, reverse = True):
+			opt_hash = calc_hash([opt, variables[opt]])
+			cmd = replace_var_ref(cmd, opt, opt + '_' + opt_hash)
+		if cmd:
+			self._fp.write('\t%s\n\n' % cmd)
+		if target.build_rule == phony_rule:
+			self._fp.write('.PHONY: %s\n' % target.name)
+BuildFileWriter.available['makefile'] = MakefileWriter
+
+
+def process_build_output(name, targets, rules, default_targets, ofn = None):
+	name = name.lower()
+	writer = BuildFileWriter.available[name](ofn)
+	list(map(writer.write_rule, filter(lambda r: r != phony_rule, rules)))
+	list(map(writer.write_target, targets))
+	writer.write_default(default_targets)
+
+################################################################################
+# Version support
+################################################################################
+
+class VersionError(Exception):
+	pass
+
+
+class Version(object):
+	def __init__(self, value):
+		try:
+			if isinstance(value, Version):
+				value = value.value
+			if isinstance(value, (list, tuple)): # (1,32,5)
+				value = list(value)
+			elif isinstance(value, str): # '1.32.5'
+				value = list(map(int, value.split('.')))
+			else:
+				value = list(map(int, str(value).split('.'))) # 1.32
+		except Exception:
+			raise VersionError('unable to parse version string %s' % repr(value))
+		self.value = tuple(value + [0] * (4 - len(value)))
+	def __repr__(self):
+		return 'Version(%s)' % str.join('.', map(repr, self.value))
+	def __lt__(self, other):
+		return self.value < Version(other).value
+	def __le__(self, other):
+		return self.value <= Version(other).value
+	def __eq__(self, other):
+		return self.value == Version(other).value
+	def __ne__(self, other):
+		return self.value != Version(other).value
+	def __gt__(self, other):
+		return self.value > Version(other).value
+	def __ge__(self, other):
+		return self.value >= Version(other).value
+
+
+class VersionComparison(object):
+	def __lt__(self, other):
+		return Version(other).__gt__
+	def __le__(self, other):
+		return Version(other).__ge__
+	def __eq__(self, other):
+		return Version(other).__eq__
+	def __ne__(self, other):
+		return Version(other).__ne__
+	def __gt__(self, other):
+		return Version(other).__lt__
+	def __ge__(self, other):
+		return Version(other).__le__
+ver = VersionComparison()
+
+################################################################################
 
 if __name__ == '__main__':
 	sys.exit(main())
