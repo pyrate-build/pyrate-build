@@ -13,7 +13,7 @@
 #-#  See the License for the specific language governing permissions and
 #-#  limitations under the License.
 
-__version__ = '0.2.6'
+__version__ = '0.2.7'
 
 import os, sys
 try:
@@ -928,8 +928,8 @@ class Context(object):
 			basepath_static_library = None,
 			basepath_shared_library = None,
 			basepath_executable = None):
-		(self.registry, self.platform, self.tools, self.toolchain) = (registry, platform, tools, tools.toolchain)
-		(self.prefix, self.prefix_mode) = (prefix, prefix_mode)
+		# set parameters that are not available to user in constructor
+		self._set_fixed(registry, platform, tools, prefix, prefix_mode)
 		self.basepath = basepath
 		self.basepath_object_file = basepath_object_file
 		self.basepath_static_library = basepath_static_library
@@ -940,6 +940,11 @@ class Context(object):
 		self.implicit_static_library_input = implicit_static_library_input
 		self.implicit_shared_library_input = implicit_shared_library_input
 		self.implicit_executable_input = implicit_executable_input
+
+	def _set_fixed(self, registry, platform, tools, prefix, prefix_mode):
+		(self.registry, self.platform) = (registry, platform)
+		(self.tools, self.toolchain) = (tools, tools.toolchain)
+		(self.prefix, self.prefix_mode) = (prefix, prefix_mode)
 
 	def match(self, value, dn = '.', recurse = False):
 		return match(value = value, dn = os.path.join(self.prefix, dn), recurse = recurse)
@@ -1016,16 +1021,20 @@ class Context(object):
 				return rule.clone()
 		raise Exception('build rule translating %s -> %s not found!' % (ttfrom, ttto))
 
-	def find_target_types(self, obj):
+	def find_target_type(self, obj):
 		result = set()
 		if hasattr(obj, 'target_type') and obj.target_type:
 			result.add(obj.target_type)
-		if hasattr(obj, 'name'):
+		elif hasattr(obj, 'name'):
 			ext = os.path.splitext(obj.name)[1].lower()
 			for tool in self.tools.get_tools():
 				if ext in tool.target_types_by_ext:
 					result.add(tool.target_types_by_ext[ext])
-		return result
+		if len(result) > 1:
+			msg = 'Multiple target types (%s) found for %s.' % (repr(result), repr(obj))
+			raise Exception(msg + ' Please set target_type property manually!')
+		elif result:
+			return result.pop()
 
 	def create_target(self, target_name, rule, input_list, add_self_to_on_use_inputs = False, **kwargs):
 		on_use_inputs = kwargs.pop('on_use_inputs', {})
@@ -1047,47 +1056,60 @@ class Context(object):
 			return value
 		return list(map(translate_str, input_list))
 
+	def _collect_object_env(self, input_list):
+		for obj in input_list:
+			source_target_type = self.find_target_type(obj)
+			if (not isinstance(obj, BuildTarget)) and (source_target_type is None):
+				yield obj
+
+	def _get_link_input_list(self, input_list, implicit_input_list, link_mode,
+			linker_opts = None, compiler_opts = None):
+		for obj in (implicit_input_list + add_rule_vars(opts = linker_opts)):
+			yield obj
+		for idx, obj in enumerate(input_list):
+			source_target_type = self.find_target_type(obj)
+			if source_target_type in ['object', 'shared', 'static']:
+				yield obj
+			elif source_target_type is not None:
+				if link_mode == 'single':
+					object_input_list = list(self.get_implicit_input(self.implicit_object_input))
+					object_input_list.extend(self._collect_object_env(input_list[:idx]))
+					object_input_list.append(obj)
+					object_input_list.extend(self._collect_object_env(input_list[idx+1:]))
+					yield self.object_file(os.path.relpath(obj.name, self.prefix),
+						compiler_opts = compiler_opts, input_list = object_input_list)
+				elif link_mode == 'direct':
+					for obj_input in (self.get_implicit_input(self.implicit_object_input) + add_rule_vars(opts = compiler_opts)):
+						yield obj_input
+					link_mode = 'direct_obj' # object input is only added once in direct link_mode
+				if link_mode == 'direct_obj':
+					yield obj
+			elif not isinstance(obj, BuildTarget):
+				yield obj
+			else:
+				raise Exception('%s: Unable to process input %s' % (build_name, repr(obj)))
+
 	def link(self, build_name, target_type, input_list, implicit_input_list,
 			add_self_to_on_use_inputs, link_mode = 'single', **kwargs):
 		input_list = self.force_build_source(input_list)
 		input_list.extend(self.platform.get_required_inputs(target_type, self.tools))
-		object_input = []
-		link_input = []
-		inputs_by_target_type = {}
-		for obj in input_list:
-			source_target_types = self.find_target_types(obj)
-			if len(source_target_types) == 1:
-				source_target_type = source_target_types.pop()
-				if source_target_type in ['object', 'shared', 'static']:
-					link_input.append(obj)
-				else:
-					inputs_by_target_type.setdefault(source_target_type, []).append(obj)
-			elif not isinstance(obj, BuildTarget):
-				object_input.append(obj)
-				link_input.append(obj)
-			else:
-				raise Exception('Unable to process %s (handlers %s)' % (repr(obj), repr(source_target_types)))
-
-		input_list_new = list(self.get_implicit_input(implicit_input_list))
-		input_list_new.extend(add_rule_vars(opts = kwargs.pop('linker_opts', None)))
-
-		compiler_opts = kwargs.pop('compiler_opts', None)
-		if (link_mode == 'direct') and (len(inputs_by_target_type) == 1):
-			(input_target_type, input_list) = inputs_by_target_type.popitem()
-			rule = self.find_rule(input_target_type, target_type)
-			input_list_new.extend(self.get_implicit_input(self.implicit_object_input))
-			input_list_new.extend(input_list + object_input + add_rule_vars(opts = compiler_opts))
-		else:
-			for (input_target_type, input_list) in inputs_by_target_type.items():
-				if link_mode == 'single':
-					for obj in input_list:
-						obj_file = self.object_file(os.path.relpath(obj.name, self.prefix), compiler_opts = compiler_opts,
-							input_list = self.get_implicit_input(self.implicit_object_input) + [obj] + object_input)
-						input_list_new.append(obj_file)
+		# Discover source target types in input_list
+		input_target_types = set()
+		for input_target_type in map(self.find_target_type, input_list):
+			if input_target_type:
+				input_target_types.add(input_target_type)
+		# Disable direct link_mode if multiple source types are present
+		if (len(input_target_types) > 1) and (link_mode == 'direct'):
+			link_mode = 'single' # multiple input targets
+		# Find rule for direct
+		if link_mode == 'single':
 			rule = self.find_rule('object', target_type)
+		elif link_mode == 'direct':
+			rule = self.find_rule(input_target_types.pop(), target_type)
 
-		target = self.create_target(build_name, rule = rule,
-			input_list = input_list_new + link_input,
+		link_input = self._get_link_input_list(input_list, implicit_input_list, link_mode,
+			linker_opts = kwargs.pop('linker_opts', None), compiler_opts = kwargs.pop('compiler_opts', None))
+		target = self.create_target(build_name, rule = rule, input_list = list(link_input),
 			add_self_to_on_use_inputs = add_self_to_on_use_inputs,
 			target_type = target_type, **kwargs)
 		Context.targets.append(target)
@@ -1096,15 +1118,16 @@ class Context(object):
 	def object_file(self, obj_name, input_list = None, compiler_opts = None, **kwargs):
 		input_list = self.force_build_source(input_list)
 		# collect rules from the input object extensions
-		source_target_types = set()
-		for source_target_types_new in map(self.find_target_types, input_list):
-			source_target_types.update(source_target_types_new)
-		if len(source_target_types) != 1:
-			raise Exception('Unable to find unique handler (%s) to generate %s' % (repr(source_target_types), obj_name))
+		source_target_type = set()
+		for source_target_type_new in map(self.find_target_type, input_list):
+			if source_target_type_new:
+				source_target_type.add(source_target_type_new)
+		if len(source_target_type) != 1:
+			raise Exception('Unable to find unique handler (%s) to generate %s' % (repr(source_target_type), obj_name))
 		install_name = get_normed_name(obj_name, self.platform.extensions['object'])
 		build_name = os.path.join(self.get_basepath(self.basepath_object_file), install_name)
 		return self.create_target(build_name, install_name = install_name, user_name = obj_name,
-			target_type = 'object', rule = self.find_rule(source_target_types.pop(), 'object'),
+			target_type = 'object', rule = self.find_rule(source_target_type.pop(), 'object'),
 			input_list = self.get_implicit_input(self.implicit_object_input) + input_list + add_rule_vars(opts = compiler_opts),
 			add_self_to_on_use_inputs = True, **kwargs)
 
@@ -1155,7 +1178,7 @@ class Context(object):
 	def install(self, target_list, destination = None):
 		result = []
 		for obj in ensure_list(target_list):
-			obj_target_type = self.find_target_types(obj).pop()
+			obj_target_type = self.find_target_type(obj)
 			install_name = obj.name
 			if obj.install_name:
 				install_name = obj.install_name
