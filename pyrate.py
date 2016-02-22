@@ -1275,6 +1275,17 @@ def define_non_pkg_config_externals():
 			version_parser = lambda version_str: version_str.split()[-1])
 define_non_pkg_config_externals()
 
+
+class External_SCM(External):
+	def _run(self, directory, *args):
+		dn = os.getcwd()
+		try:
+			os.chdir(directory)
+			return run_process(args)
+		except:
+			os.chdir(directory)
+			raise
+
 ################################################################################
 # Toolchains + helper functions
 ################################################################################
