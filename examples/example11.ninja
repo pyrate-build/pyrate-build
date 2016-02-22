@@ -1,3 +1,11 @@
+CC = gcc
+CC_FLAGS = -Wall -pedantic
+rule compile_c
+  command = $CC $CC_FLAGS ${opts} -MMD -MT $out -MF $out.d -c $in -o $out
+  description = compile(c) $out
+  depfile = $out.d
+  deps = gcc
+
 CXX = g++
 CXX_FLAGS = -Wall -pedantic
 rule compile_cpp
@@ -6,20 +14,15 @@ rule compile_cpp
   depfile = $out.d
   deps = gcc
 
-rule install
-  command = cp $in $out
-  description = installing executable $out
-
 LINKER_EXE = gcc
 LINKER_EXE_FLAGS = 
 rule link_exe
   command = $LINKER_EXE $LINKER_EXE_FLAGS ${opts} -o $out $in
   description = link(exe) $out
 
-build build/obj/test.o: compile_cpp test.cpp
-build build/obj/foo.o: compile_cpp foo.cpp
-build build/subdir/example11.bin: link_exe build/obj/test.o build/obj/foo.o
+build test_1cfedb0e86f69ad43c2ba451c73bb586.o: compile_cpp test.cpp
+build test_bfbd55b5c9a7d832c6f6e0a42a24e686.o: compile_c test.c
+build foo.o: compile_cpp foo.cpp
+build example11.bin: link_exe test_1cfedb0e86f69ad43c2ba451c73bb586.o test_bfbd55b5c9a7d832c6f6e0a42a24e686.o foo.o
   opts = -lstdc++ -lm
-build /usr/bin/subdir/example11.bin: install build/subdir/example11.bin
-build install: phony /usr/bin/subdir/example11.bin
-build all: phony build/subdir/example11.bin
+build all: phony example11.bin

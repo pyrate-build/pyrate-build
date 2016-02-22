@@ -1,0 +1,31 @@
+CXX = g++
+CXX_FLAGS = -Wall -pedantic
+rule compile_cpp
+  command = $CXX $CXX_FLAGS ${opts} -MMD -MT $out -MF $out.d -c $in -o $out
+  description = compile(cpp) $out
+  depfile = $out.d
+  deps = gcc
+
+rule install
+  command = cp $in $out
+  description = installing executable $out
+
+LINKER_EXE = gcc
+LINKER_EXE_FLAGS = 
+rule link_exe_4c70e217a64a8acfed3d143a02115d67
+  command = $LINKER_EXE $LINKER_EXE_FLAGS -lstdc++ -lm -o $out $in
+  description = link(exe) $out
+
+build test.o: compile_cpp test.cpp
+build foo.o: compile_cpp foo.cpp
+build example13.bin: link_exe_4c70e217a64a8acfed3d143a02115d67 test.o foo.o
+build /usr/bin/example13.bin: install example13.bin
+build included/test.o: compile_cpp test.cpp
+  opts = -O3
+build included/foo.o: compile_cpp foo.cpp
+  opts = -O3
+build included/example13a.bin: link_exe_4c70e217a64a8acfed3d143a02115d67 included/test.o included/foo.o
+build /usr/bin/example13a.bin: install included/example13a.bin
+build included: phony included/test.o included/foo.o included/example13a.bin /usr/bin/example13a.bin
+build install: phony /usr/bin/example13.bin /usr/bin/example13a.bin
+build all: phony example13.bin included/example13a.bin

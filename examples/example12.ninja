@@ -12,20 +12,14 @@ rule install
 
 LINKER_EXE = gcc
 LINKER_EXE_FLAGS = 
-rule link_exe_4c70e217a64a8acfed3d143a02115d67
-  command = $LINKER_EXE $LINKER_EXE_FLAGS -lstdc++ -lm -o $out $in
+rule link_exe
+  command = $LINKER_EXE $LINKER_EXE_FLAGS ${opts} -o $out $in
   description = link(exe) $out
 
-build test_1cfedb0e86f69ad43c2ba451c73bb586.o: compile_cpp test.cpp
-build foo_a30d37c95b97852fd6dc8f4a1cf0a8e1.o: compile_cpp foo.cpp
-build example12.bin: link_exe_4c70e217a64a8acfed3d143a02115d67 test_1cfedb0e86f69ad43c2ba451c73bb586.o foo_a30d37c95b97852fd6dc8f4a1cf0a8e1.o
-build /usr/bin/example12.bin: install example12.bin
-build test_ea06e0f15a7fb50d00928f0d8923fdef.o: compile_cpp test.cpp
-  opts = -O3
-build foo_b323f8bc970eb8ff180102d50bd99af1.o: compile_cpp foo.cpp
-  opts = -O3
-build example12a.bin: link_exe_4c70e217a64a8acfed3d143a02115d67 test_ea06e0f15a7fb50d00928f0d8923fdef.o foo_b323f8bc970eb8ff180102d50bd99af1.o
-build /usr/bin/example12a.bin: install example12a.bin
-build included: phony test_ea06e0f15a7fb50d00928f0d8923fdef.o foo_b323f8bc970eb8ff180102d50bd99af1.o example12a.bin /usr/bin/example12a.bin
-build install: phony /usr/bin/example12.bin /usr/bin/example12a.bin
-build all: phony example12.bin example12a.bin
+build build/obj/test.o: compile_cpp test.cpp
+build build/obj/foo.o: compile_cpp foo.cpp
+build build/subdir/example12.bin: link_exe build/obj/test.o build/obj/foo.o
+  opts = -lstdc++ -lm
+build /usr/bin/subdir/example12.bin: install build/subdir/example12.bin
+build install: phony /usr/bin/subdir/example12.bin
+build all: phony build/subdir/example12.bin

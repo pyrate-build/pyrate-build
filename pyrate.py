@@ -562,7 +562,7 @@ class External_gcc(External_SimpleCompiler):
 		compiler_opts = (compiler_opts or '-Wall -pedantic')
 		ext_list = (ext_list or ['.c'])
 		self._check_version(version, run_process([compiler, '--version'])[0].splitlines()[0].split()[-1])
-		External_SimpleCompiler.__init__(self, ctx, std = std, lang = 'compile_c',
+		External_SimpleCompiler.__init__(self, ctx, std = std, lang = 'c',
 			compiler = compiler, compiler_opts = compiler_opts, var_prefix = 'CC', ext_list = ext_list)
 register_external(External_gcc, 'gcc')
 
@@ -606,7 +606,7 @@ class External_clang(External_SimpleCompiler):
 		compiler_opts = (compiler_opts or '-Weverything -Wno-padded')
 		ext_list = (ext_list or ['.c'])
 		self._check_version(version, run_process([compiler, '--version'])[0].splitlines()[0].split()[2])
-		External_SimpleCompiler.__init__(self, ctx, std = std, lang = 'compile_c',
+		External_SimpleCompiler.__init__(self, ctx, std = std, lang = 'c',
 			compiler = compiler, compiler_opts = compiler_opts, var_prefix = 'CC', ext_list = ext_list)
 register_external(External_clang, 'clang')
 
@@ -1031,8 +1031,8 @@ class Context(object):
 				if ext in tool.target_types_by_ext:
 					result.add(tool.target_types_by_ext[ext])
 		if len(result) > 1:
-			msg = 'Multiple target types (%s) found for %s.' % (repr(result), repr(obj))
-			raise Exception(msg + ' Please set target_type property manually!')
+			raise Exception('Multiple target types (%s) found for %s.' % (repr(result), repr(obj)) +
+				'Please set target_type property manually!')
 		elif result:
 			return result.pop()
 
@@ -1062,7 +1062,7 @@ class Context(object):
 			if (not isinstance(obj, BuildTarget)) and (source_target_type is None):
 				yield obj
 
-	def _get_link_input_list(self, input_list, implicit_input_list, link_mode,
+	def _get_link_input_list(self, build_name, input_list, implicit_input_list, link_mode,
 			linker_opts = None, compiler_opts = None):
 		for obj in (implicit_input_list + add_rule_vars(opts = linker_opts)):
 			yield obj
@@ -1107,7 +1107,7 @@ class Context(object):
 		elif link_mode == 'direct':
 			rule = self.find_rule(input_target_types.pop(), target_type)
 
-		link_input = self._get_link_input_list(input_list, implicit_input_list, link_mode,
+		link_input = self._get_link_input_list(build_name, input_list, implicit_input_list, link_mode,
 			linker_opts = kwargs.pop('linker_opts', None), compiler_opts = kwargs.pop('compiler_opts', None))
 		target = self.create_target(build_name, rule = rule, input_list = list(link_input),
 			add_self_to_on_use_inputs = add_self_to_on_use_inputs,

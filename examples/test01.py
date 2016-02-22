@@ -19,7 +19,7 @@ repr(macro('DEBUG'))
 repr(toolchain)
 repr(tools)
 len(tools)
-repr(install(exe))
+str(install(exe)[0])
 for tool in tools:
 	logging.critical('%s: %s', tool, repr(tools[tool]))
 logging.critical('deleting c/c++')
