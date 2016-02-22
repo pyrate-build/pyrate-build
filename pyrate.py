@@ -13,7 +13,7 @@
 #-#  See the License for the specific language governing permissions and
 #-#  limitations under the License.
 
-__version__ = '0.2.5'
+__version__ = '0.2.6'
 
 import os, sys
 try:
@@ -166,12 +166,10 @@ class NinjaBuildFileWriter(BuildOutput):
 		if self._vars.get(key) != value:
 			self._fp.write('%s = %s\n' % (key, value.strip()))
 		self._vars[key] = value
-	def write_default(self, target_list, target_list_all, target_list_install):
-		if target_list_install:
-			self._fp.write('build install: phony %s\n' % str.join(' ', map(lambda t: t.name, target_list_install)))
-		self._fp.write('build all: phony %s\n' % str.join(' ', map(lambda t: t.name, target_list_all)))
-		if target_list is not None:
-			self._fp.write('default %s\n' % str.join(' ', map(lambda t: t.name, target_list)))
+	def write_default(self, default_targets):
+		if (len(default_targets) == 1) and (default_targets[0].name == 'all'):
+			return
+		self._fp.write('default %s\n' % str.join(' ', map(lambda t: t.name, default_targets)))
 	def write_rule(self, rule):
 		for key, value in sorted(rule.defaults.items()):
 			self._write_var(key, value)
@@ -198,14 +196,12 @@ class MakefileWriter(BuildOutput):
 		self._vars = set()
 	def _write_var(self, key, value):
 		self._fp.write('%s := %s\n' % (key, value.strip()))
-	def write_default(self, target_list, target_list_all, target_list_install):
-		self._fp.write('all: %s\n' % str.join(' ', map(lambda t: t.name, target_list_all)))
-		if target_list_install:
-			self._fp.write('install: %s\n' % str.join(' ', map(lambda t: t.name, target_list_install)))
-		default = 'all'
-		if target_list is not None:
-			self._fp.write('default: %s\n' % str.join(' ', map(lambda t: t.name, target_list)))
-			default = 'default'
+	def write_default(self, default_targets):
+		default = default_targets[0].name
+		if len(default_targets) > 1:
+			default = 'default_target'
+			self._fp.write('%s: %s\n' % (default, str.join(' ', map(lambda t: t.name, default_targets))))
+			self._fp.write('.PHONY: %s\n' % default)
 		self._fp.write('.DEFAULT_GOAL := %s\n' % default)
 	def write_rule(self, rule):
 		for key, value in sorted(rule.defaults.items()):
@@ -236,16 +232,19 @@ class MakefileWriter(BuildOutput):
 		for opt in sorted(variables.keys(), key = len, reverse = True):
 			opt_hash = calc_hash([opt, variables[opt]])
 			cmd = replace_var_ref(cmd, opt, opt + '_' + opt_hash)
-		self._fp.write('\t%s\n\n' % cmd)
+		if cmd:
+			self._fp.write('\t%s\n\n' % cmd)
+		if target.build_rule == phony_rule:
+			self._fp.write('.PHONY: %s\n' % target.name)
 BuildOutput.available['makefile'] = MakefileWriter
 
 
 def process_build_output(name, targets, rules, default_targets, ofn = None):
 	name = name.lower()
 	writer = BuildOutput.available[name](ofn)
-	list(map(writer.write_rule, rules))
+	list(map(writer.write_rule, filter(lambda r: r != phony_rule, rules)))
 	list(map(writer.write_target, targets))
-	writer.write_default(ensure_list(default_targets), Context.targets, Context.install_targets)
+	writer.write_default(default_targets)
 
 
 class SelfReference(object):
@@ -278,6 +277,7 @@ class Rule(object):
 	def __repr__(self):
 		return '%s(%s)' % (self.__class__.__name__, repr(self.name))
 
+phony_rule = Rule((None, None), 'phony', '', '', {})
 
 class BuildSource(object):
 	def __init__(self, on_use_inputs = None, on_use_deps = None, on_use_variables = None):
@@ -384,6 +384,15 @@ class InputFile(BuildSource):
 
 	def __repr__(self):
 		return '%s(name = %s, on_use_inputs = {None: [self]})' % (self.__class__.__name__, repr(self.name))
+
+
+class TargetAlias(BuildSource):
+	def __init__(self, target):
+		self.target = target
+		BuildSource.__init__(self, on_use_inputs = {None: [target]})
+
+	def __repr__(self):
+		return '%s(target = %s)' % (self.__class__.__name__, repr(self.target))
 
 
 class RuleVariables(BuildSource):
@@ -1160,15 +1169,17 @@ class Context(object):
 				prefix = os.path.abspath(os.path.expanduser(os.path.expandvars(destination)))
 			install_name = os.path.join(prefix, install_name)
 			rule = self.find_rule(obj_target_type, 'install')
-			target = self.create_target(install_name, rule = rule, input_list = [InputFile(obj.name)])
+			target = self.create_target(install_name, rule = rule, input_list = [TargetAlias(obj)])
 			result.append(target)
 			Context.install_targets.append(target)
 		return result
 
-	def include(self, build_file_list, inherit = False, prefix_mode = None):
+	def include(self, build_file_list, inherit = False, target_name = None, prefix_mode = None):
 		result = []
 		for build_cfg in ensure_list(build_file_list):
+			build_name = None
 			if os.path.isdir(build_cfg):
+				build_name = build_cfg.replace('/', '_').replace('\\', '_').replace('.', '_')
 				build_cfg = os.path.join(build_cfg, 'build.py')
 			build_path = os.path.dirname(build_cfg)
 			kwargs = {}
@@ -1187,7 +1198,16 @@ class Context(object):
 			ctx = Context(self.registry, self.platform, self.tools,
 				os.path.join(self.prefix, build_path), prefix_mode = prefix_mode, **kwargs)
 			run_build_file(build_cfg, ctx, {})
-			result.append((build_cfg, self.registry.target_list[registry_start_idx:]))
+			included_targets = self.registry.target_list[registry_start_idx:]
+			result.append((build_cfg, included_targets))
+			if build_name and not target_name:
+				self.create_target(build_name, phony_rule,
+					input_list = list(map(TargetAlias, included_targets)))
+		if target_name:
+			target_list = []
+			for build_cfg_targets in result:
+				target_list.extend(map(TargetAlias, build_cfg_targets[1]))
+			self.create_target(target_name, phony_rule, input_list = target_list)
 		return result
 
 
@@ -1291,6 +1311,28 @@ def create_macro(expr):
 	return RuleVariables(dict.fromkeys(rule_list, {'opts': ['-D' + expr]}))
 
 
+def format_exception(bfn, ex):
+	import traceback, linecache
+	exinfo = traceback.format_exception_only(ex.__class__, ex)
+	if ex.__class__ == SyntaxError:
+		exinfo = exinfo[1:]
+		lineno = ex.lineno
+		content = ''
+		sys.stderr.write('Error while processing %s:%s\n\t%s\n' % (os.path.abspath(bfn), lineno, content.strip()))
+	else:
+		exec_line = None
+		exloc = traceback.extract_tb(sys.exc_info()[2])
+		for idx, entry in enumerate(exloc):
+			if entry[3] is None:
+				exec_line = idx
+		if exec_line is not None:
+			exloc = [(bfn, exloc[exec_line][1], '', linecache.getline(bfn, exloc[exec_line][1]))] + exloc[exec_line:]
+		sys.stderr.write('Error while processing %s\n' % os.path.abspath(bfn))
+		sys.stderr.write(str.join('', traceback.format_list(exloc)))
+	sys.stderr.write(str.join('', exinfo))
+	sys.exit(1)
+
+
 def run_build_file(bfn, ctx, user_env):
 	pyrate_version = Version(__version__)
 	exec_globals = {} # needed to reference itself in default_ctx_call
@@ -1331,25 +1373,7 @@ def run_build_file(bfn, ctx, user_env):
 		try:
 			exec(bfp.read(), exec_globals)
 		except Exception as ex:
-			import traceback, linecache
-			exinfo = traceback.format_exception_only(ex.__class__, ex)
-			if ex.__class__ == SyntaxError:
-				exinfo = exinfo[1:]
-				lineno = ex.lineno
-				content = ''
-				sys.stderr.write('Error while processing %s:%s\n\t%s\n' % (os.path.abspath(bfn), lineno, content.strip()))
-			else:
-				exec_line = None
-				exloc = traceback.extract_tb(sys.exc_info()[2])
-				for idx, entry in enumerate(exloc):
-					if entry[3] is None:
-						exec_line = idx
-				if exec_line is not None:
-					exloc = [(bfn, exloc[exec_line][1], '', linecache.getline(bfn, exloc[exec_line][1]))] + exloc[exec_line:]
-				sys.stderr.write('Error while processing %s\n' % os.path.abspath(bfn))
-				sys.stderr.write(str.join('', traceback.format_list(exloc)))
-			sys.stderr.write(str.join('', exinfo))
-			sys.exit(1)
+			format_exception(bfn, ex)
 	return exec_globals
 
 
@@ -1370,6 +1394,14 @@ def generate_build_file(bfn, ofn, mode):
 
 	default_targets = exec_globals.get('default_targets')
 	(rules, targets) = registry.write()
+	if Context.install_targets:
+		targets.append(BuildTarget('install', phony_rule, list(map(lambda t: InputFile(t.name), Context.install_targets))))
+	target_all = BuildTarget('all', phony_rule, list(map(lambda t: InputFile(t.name), Context.targets)))
+	targets.append(target_all)
+	default_targets = ensure_list(default_targets)
+	if default_targets is None:
+		default_targets = [target_all]
+
 	bsys_list = exec_globals.get('build_output', ['ninja'])
 	for bsys in bsys_list:
 		if ofn and (len(bsys_list) > 1):

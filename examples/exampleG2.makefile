@@ -20,6 +20,8 @@ example11.bin: test.o foo.o
 /tmp/bin/example11.bin: example11.bin
 	cp example11.bin /tmp/bin/example11.bin
 
-all: example11.bin
 install: /tmp/bin/example11.bin
+.PHONY: install
+all: example11.bin
+.PHONY: all
 .DEFAULT_GOAL := all

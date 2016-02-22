@@ -352,11 +352,13 @@ Installing Targets
 Subdirectories
 ~~~~~~~~~~~~~~
 
-- ``include(build_file_list, inherit = False)``
+- ``include(build_file_list, inherit = False, target_name = None)``
   This function will read in the given build config file(s). If a directory is given
   instead of a build config file, **pyrate** will enter the given directory and use the file ``build.py``
   if available. The parameter ``inherit`` allows to inherit ``basepath_*`` and ``implicit_*`` settings
-  from the current context.
+  from the current context. The parameter ``target_name`` allows to specify the name of the alias that
+  allows to build all included targets. By default, this target name is derived from the path given in
+  ``build_file_list``.
   *Current implementation notice - the targets from the included file will be
   adapted for proper paths and included in the build output of the main file. The goal is to allow
   very loose coupling between the main project and the subsystem projects so each subsystem can

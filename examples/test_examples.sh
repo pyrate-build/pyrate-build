@@ -64,12 +64,12 @@ run_test_general() {
 
 $EXEC --version
 TESTS="../examples/example01.py example01.py example02.py example03.py example04.py example05.py"
-TESTS="$TESTS example06.py example07.py example08.py example09.py example10.py example11.py"
+TESTS="$TESTS example06.py example07.py example08.py example09.py example10.py example11.py example12.py"
 for EXAMPLE in $TESTS; do
 	run_test $EXAMPLE
 done
 
-for EXAMPLE in exampleM1.py exampleM2.py; do
+for EXAMPLE in exampleM1.py exampleM2.py exampleM3.py; do
 	run_test_make $EXAMPLE
 done
 

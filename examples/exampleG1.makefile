@@ -17,4 +17,5 @@ exampleG1.bin: test.o foo.o
 	$(LINKER_EXE) $(LINKER_EXE_FLAGS) $(opts_feb8a140c0d0f69d31572276363b144b) -o exampleG1.bin test.o foo.o
 
 all: exampleG1.bin
+.PHONY: all
 .DEFAULT_GOAL := all

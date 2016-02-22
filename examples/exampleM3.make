@@ -30,4 +30,6 @@ exampleM2_release.bin: test_ea06e0f15a7fb50d00928f0d8923fdef.o foo_b323f8bc970eb
 
 all: exampleM2_debug.bin exampleM2_release.bin
 .PHONY: all
-.DEFAULT_GOAL := exampleM2_release.bin
+default_target: exampleM2_release.bin exampleM2_debug.bin
+.PHONY: default_target
+.DEFAULT_GOAL := default_target
