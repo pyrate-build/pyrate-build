@@ -29,6 +29,6 @@ for tool in tools:
 	logging.critical('%s: %s', tool, repr(tools[tool]))
 try:
 	object_file('test.obj', ['test.cpp'])
-except:
+except Exception:
 	logging.critical('rule not found!')
 assert(False)

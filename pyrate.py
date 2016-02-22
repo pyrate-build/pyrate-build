@@ -26,11 +26,6 @@ except ImportError:
 	def calc_hash(value):
 		return __import__('md5').md5(repr(value)).hexdigest()
 
-def none_to_obj(value, obj):
-	if value is None:
-		return obj
-	return value
-
 def ensure_list(value):
 	if isinstance(value, (list, tuple)):
 		return list(value)
@@ -283,10 +278,10 @@ class BuildSource(object):
 	def __init__(self, on_use_inputs = None, on_use_deps = None, on_use_variables = None):
 		self.on_use_inputs = self._resolve_self(on_use_inputs)
 		self.on_use_deps = self._resolve_self(on_use_deps)
-		self.on_use_variables = dict(none_to_obj(on_use_variables, {}))
+		self.on_use_variables = dict(on_use_variables or {})
 
 	def _resolve_self(self, on_use_dict):
-		on_use_dict = none_to_obj(on_use_dict, {})
+		on_use_dict = on_use_dict or {}
 		result = {}
 		for key, value_list in on_use_dict.items():
 			for value in value_list:
@@ -355,7 +350,7 @@ class BuildTarget(BuildSource):
 	def get_build_variables(self):
 		def combine_variables(result, variables):
 			for key, values in variables.items():
-				for value in none_to_obj(values, []):
+				for value in (values or []):
 					opt_list = result.setdefault(key, [])
 					if value not in opt_list:
 						opt_list.append(value)
@@ -379,7 +374,7 @@ class BuildTarget(BuildSource):
 class InputFile(BuildSource):
 	def __init__(self, name, rule_list = None):
 		self.name = name
-		rule_list = ensure_list(none_to_obj(rule_list, [None]))
+		rule_list = ensure_list(rule_list or [None])
 		BuildSource.__init__(self, on_use_inputs = dict.fromkeys(rule_list, [self]))
 
 	def __repr__(self):
@@ -419,9 +414,9 @@ class External(BuildSource):
 		assert(ctx)
 		self.name = self.__class__.name
 		BuildSource.__init__(self, on_use_variables = on_use_variables)
-		self.rules = none_to_obj(rules, [])
-		self.target_types_by_ext = none_to_obj(target_types_by_ext, {})
-		self.required_inputs_by_target_type = none_to_obj(required_inputs_by_target_type, {})
+		self.rules = (rules or [])
+		self.target_types_by_ext = (target_types_by_ext or {})
+		self.required_inputs_by_target_type = (required_inputs_by_target_type or {})
 
 	def _check_version(self, version_req, version_str):
 		self.version = Version(version_str)
@@ -447,12 +442,12 @@ class External_linker(External):
 			link_static, link_static_opts, link_static_def, link_static_opts_def,
 			link_shared, link_shared_opts, link_shared_def, link_shared_opts_def,
 			link_exe, link_exe_opts, link_exe_def, link_exe_opts_def):
-		link_static = none_to_obj(link_static, link_static_def)
-		link_static_opts = none_to_obj(link_static_opts, link_static_opts_def)
-		link_shared = none_to_obj(link_shared, link_shared_def)
-		link_shared_opts = none_to_obj(link_shared_opts, link_shared_opts_def)
-		link_exe = none_to_obj(link_exe, link_exe_def)
-		link_exe_opts = none_to_obj(link_exe_opts, link_exe_opts_def)
+		link_static = (link_static or link_static_def)
+		link_static_opts = (link_static_opts or link_static_opts_def)
+		link_shared = (link_shared or link_shared_def)
+		link_shared_opts = (link_shared_opts or link_shared_opts_def)
+		link_exe = (link_exe or link_exe_def)
+		link_exe_opts = (link_exe_opts or link_exe_opts_def)
 		External.__init__(self, ctx,
 			rules = [
 				Rule(('object', 'static'), 'link_static',
@@ -563,9 +558,9 @@ class External_SimpleCompiler(External): # C family compiler
 
 class External_gcc(External_SimpleCompiler):
 	def __init__(self, ctx, version = None, std = None, compiler = None, compiler_opts = None, ext_list = None):
-		compiler = none_to_obj(compiler, 'gcc')
-		compiler_opts = none_to_obj(compiler_opts, '-Wall -pedantic')
-		ext_list = none_to_obj(ext_list, ['.c'])
+		compiler = (compiler or 'gcc')
+		compiler_opts = (compiler_opts or '-Wall -pedantic')
+		ext_list = (ext_list or ['.c'])
 		self._check_version(version, run_process([compiler, '--version'])[0].splitlines()[0].split()[-1])
 		External_SimpleCompiler.__init__(self, ctx, std = std, lang = 'compile_c',
 			compiler = compiler, compiler_opts = compiler_opts, var_prefix = 'CC', ext_list = ext_list)
@@ -574,9 +569,9 @@ register_external(External_gcc, 'gcc')
 
 class External_gpp(External_SimpleCompiler):
 	def __init__(self, ctx, version = None, std = None, compiler = None, compiler_opts = None, ext_list = None):
-		compiler = none_to_obj(compiler, 'g++')
-		compiler_opts = none_to_obj(compiler_opts, '-Wall -pedantic')
-		ext_list = none_to_obj(ext_list, ['.cpp', '.cxx', '.cc'])
+		compiler = (compiler or 'g++')
+		compiler_opts = (compiler_opts or '-Wall -pedantic')
+		ext_list = (ext_list or ['.cpp', '.cxx', '.cc'])
 		self._check_version(version, run_process([compiler, '--version'])[0].splitlines()[0].split()[-1])
 		External_SimpleCompiler.__init__(self, ctx, std = std, lang = 'cpp',
 			compiler = compiler, compiler_opts = compiler_opts,
@@ -596,9 +591,9 @@ register_external(External_gpp, 'g++', 'gpp')
 
 class External_gfortran(External_SimpleCompiler):
 	def __init__(self, ctx, version = None, std = None, compiler = None, compiler_opts = None, ext_list = None):
-		compiler = none_to_obj(compiler, 'gfortran')
-		compiler_opts = none_to_obj(compiler_opts, '-Wall')
-		ext_list = none_to_obj(ext_list, ['.f'])
+		compiler = (compiler or 'gfortran')
+		compiler_opts = (compiler_opts or '-Wall')
+		ext_list = (ext_list or ['.f'])
 		self._check_version(version, run_process([compiler, '--version'])[0].splitlines()[0].split()[-1])
 		External_SimpleCompiler.__init__(self, ctx, std = std, lang = 'fortran',
 			compiler = compiler, compiler_opts = compiler_opts, var_prefix = 'F', ext_list = ext_list)
@@ -607,9 +602,9 @@ register_external(External_gfortran, 'gfortran')
 
 class External_clang(External_SimpleCompiler):
 	def __init__(self, ctx, version = None, std = None, compiler = None, compiler_opts = None, ext_list = None):
-		compiler = none_to_obj(compiler, 'clang')
-		compiler_opts = none_to_obj(compiler_opts, '-Weverything -Wno-padded')
-		ext_list = none_to_obj(ext_list, ['.c'])
+		compiler = (compiler or 'clang')
+		compiler_opts = (compiler_opts or '-Weverything -Wno-padded')
+		ext_list = (ext_list or ['.c'])
 		self._check_version(version, run_process([compiler, '--version'])[0].splitlines()[0].split()[2])
 		External_SimpleCompiler.__init__(self, ctx, std = std, lang = 'compile_c',
 			compiler = compiler, compiler_opts = compiler_opts, var_prefix = 'CC', ext_list = ext_list)
@@ -618,9 +613,9 @@ register_external(External_clang, 'clang')
 
 class External_clangpp(External_SimpleCompiler):
 	def __init__(self, ctx, version = None, std = None, compiler = None, compiler_opts = None, ext_list = None):
-		compiler = none_to_obj(compiler, 'clang++')
-		compiler_opts = none_to_obj(compiler_opts, '-Weverything -Wno-padded')
-		ext_list = none_to_obj(ext_list, ['.cpp', '.cxx', '.cc'])
+		compiler = (compiler or 'clang++')
+		compiler_opts = (compiler_opts or '-Weverything -Wno-padded')
+		ext_list = (ext_list or ['.cpp', '.cxx', '.cc'])
 		self._check_version(version, run_process([compiler, '--version'])[0].splitlines()[0].split()[2])
 		External_SimpleCompiler.__init__(self, ctx, std = std, lang = 'cpp',
 			compiler = compiler, compiler_opts = compiler_opts,
@@ -658,7 +653,7 @@ class External_SWIG(External):
 			[InputFile(ifile)] + add_rule_vars(opts = swig_opts, module_name = name),
 			on_use_inputs = {None: [SelfReference()]},
 			on_use_variables = wrapper_ext.on_use_variables, target_type = 'cpp')
-		return context.shared_library('_' + name, [wrapper_src, wrapper_ext] + none_to_obj(libs, []), **kwargs)
+		return context.shared_library('_' + name, [wrapper_src, wrapper_ext] + (libs or []), **kwargs)
 register_external(External_SWIG, 'swig')
 
 
@@ -961,7 +956,7 @@ class Context(object):
 		return self.prefix
 
 	def get_implicit_input(self, implicit_input):
-		return none_to_obj(implicit_input, []) + none_to_obj(self.implicit_input, [])
+		return (implicit_input or []) + (self.implicit_input or [])
 
 	def find_toolchain(self, name, *args, **kwargs):
 		name = name.lower()
@@ -1000,7 +995,7 @@ class Context(object):
 	def use_external(self, name, *args, **kwargs):
 		ext = self.find_external(name, *args, **kwargs)
 		if ext:
-			self.implicit_input = none_to_obj(self.implicit_input, [])
+			self.implicit_input = (self.implicit_input or [])
 			self.implicit_input.append(ext)
 
 	def create_external(self, name, *args, **kwargs):
@@ -1040,7 +1035,7 @@ class Context(object):
 		return self.registry.register_target(target)
 
 	def force_build_source(self, input_list_raw):
-		input_list_raw = none_to_obj(input_list_raw, [])
+		input_list_raw = (input_list_raw or [])
 		if isinstance(input_list_raw, str): # support accepting user supplied space separated string
 			input_list_raw = input_list_raw.split()
 		input_list = []

@@ -1,2 +1,5 @@
 ignore-paths:
   - examples
+pylint:
+  disable:
+    - too-many-arguments
