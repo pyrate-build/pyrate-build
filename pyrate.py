@@ -1187,6 +1187,21 @@ class External_SWIG(External):
 External_SWIG.register_external('swig')
 
 
+class External_LaTeX(External):
+	def __init__(self, ctx, **kwargs):
+		run_process(['pdflatex', '--version'])
+		self._tex2pdf = Rule(('tex', 'pdf'), 'build_tex', 'pdflatex $in -o $out', 'compile(tex) $out', {})
+		External.__init__(self, ctx, rules = [self._tex2pdf])
+		self._ctx = ctx
+
+	def pdf(self, tex_file):
+		target = self._ctx.create_target(tex_file.replace('.tex', '.pdf'), self._tex2pdf,
+			[InputFile(tex_file), InputFile(tex_file.replace('.tex', '.aux'))])
+		Context.targets.append(target)
+		return target
+External_LaTeX.register_external('latex')
+
+
 class SimpleExternal(External):
 	def __init__(self, ctx, **kwargs):
 		link_opts = ensure_list(kwargs.pop('link', []))
