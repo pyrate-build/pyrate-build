@@ -1,4 +1,4 @@
-| |PyPI Version| |Build Status| |Coverage| |Landscape| |Gitter|
+| |PyPI Version| |Documentation| |Build Status| |Coverage| |Landscape| |Gitter|
 
 pyrate
 ======
@@ -507,6 +507,10 @@ Changelog
 .. |PyPI Version| image:: https://badge.fury.io/py/pyrate-build.svg
    :target: https://badge.fury.io/py/pyrate-build
    :alt: Latest PyPI version
+
+.. |Documentation| image:: https://readthedocs.org/projects/pyrate-build/badge/?version=stable
+   :target: http://pyrate-build.readthedocs.org/en/stable/?badge=stable
+   :alt: Documentation Status
 
 .. |Build Status| image:: https://travis-ci.org/pyrate-build/pyrate-build.svg?branch=master
    :target: https://travis-ci.org/pyrate-build/pyrate-build
