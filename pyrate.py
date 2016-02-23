@@ -433,6 +433,7 @@ class Context(object):
 		(self.registry, self.platform) = (registry, platform)
 		(self.tools, self.toolchain) = (tools, tools.toolchain)
 		(self.prefix, self.prefix_mode) = (prefix, prefix_mode)
+		self._tracker = []
 
 	def match(self, value, dn = '.', recurse = False):
 		return match(value = value, dn = os.path.join(self.prefix, dn), recurse = recurse)
@@ -680,8 +681,16 @@ class Context(object):
 			Context.install_targets.append(target)
 		return result
 
+	def _push_tracker(self):
+		self._tracker.append((len(Context.targets), len(Context.install_targets)))
+
+	def _pop_tracker(self):
+		(idx_targets, idx_install_targets) = self._tracker.pop()
+		return (Context.targets[idx_targets:], Context.install_targets[idx_install_targets:])
+
 	def include(self, build_file_list, inherit = False, target_name = None, prefix_mode = None):
 		result = []
+		self._push_tracker()
 		for build_cfg in ensure_list(build_file_list):
 			build_name = None
 			if os.path.isdir(build_cfg):
@@ -700,20 +709,27 @@ class Context(object):
 				kwargs['basepath_static_library'] = self.basepath_static_library
 				kwargs['basepath_shared_library'] = self.basepath_shared_library
 				kwargs['basepath_executable'] = self.basepath_executable
-			registry_start_idx = len(self.registry.target_list)
+			self._push_tracker()
 			ctx = Context(self.registry, self.platform, self.tools,
 				os.path.join(self.prefix, build_path), prefix_mode = prefix_mode, **kwargs)
 			run_build_file(build_cfg, ctx, {})
-			included_targets = self.registry.target_list[registry_start_idx:]
-			result.append((build_cfg, included_targets))
+			(included_targets, included_install_targets) = self._pop_tracker()
 			if build_name and not target_name:
-				self.create_target(build_name, phony_rule,
-					input_list = list(map(TargetAlias, included_targets)))
+				if included_targets:
+					self.create_target(build_name, phony_rule,
+						input_list = list(map(TargetAlias, included_targets)))
+				if included_install_targets:
+					self.create_target('install_' + build_name, phony_rule,
+						input_list = list(map(TargetAlias, included_install_targets)))
+			result.append((build_cfg, included_targets, included_install_targets))
+		(included_targets, included_install_targets) = self._pop_tracker()
 		if target_name:
-			target_list = []
-			for build_cfg_targets in result:
-				target_list.extend(map(TargetAlias, build_cfg_targets[1]))
-			self.create_target(target_name, phony_rule, input_list = target_list)
+			if included_targets:
+				self.create_target(target_name, phony_rule,
+					input_list = list(map(TargetAlias, included_targets)))
+			if included_install_targets:
+				self.create_target('install_' + target_name, phony_rule,
+					input_list = list(map(TargetAlias, included_install_targets)))
 		return result
 
 

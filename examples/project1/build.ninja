@@ -29,7 +29,8 @@ rule link_static
 build build/foo/foo.o: compile_cpp foo/foo.cpp
 build build/foo/libfoo.a: link_static build/foo/foo.o
 build /usr/lib/libfoo.a: install_lib build/foo/libfoo.a
-build foo: phony build/foo/foo.o build/foo/libfoo.a /usr/lib/libfoo.a
+build foo: phony build/foo/libfoo.a
+build install_foo: phony /usr/lib/libfoo.a
 build build/test.o: compile_cpp test.cpp
 build build/example02.bin: link_exe build/test.o build/foo/libfoo.a
   opts = -lstdc++ -lm
