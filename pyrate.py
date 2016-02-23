@@ -101,9 +101,6 @@ class SelfReference(object):
 	def __init__(self, ref = None):
 		self._ref = ref
 
-	def __repr__(self):
-		return 'self'
-
 
 class Rule(object):
 	def __init__(self, connection, name, cmd, desc, defaults,
@@ -471,7 +468,7 @@ class Context(object):
 				result.add(obj)
 		if len(result) == 1:
 			return result.pop()
-		elif len(result) > 2:
+		elif len(result) > 1:
 			raise Exception('Multiple matches found for %s: %s', repr(name), repr(result))
 
 	def find_external(self, name, *args, **kwargs):
@@ -538,6 +535,8 @@ class Context(object):
 			input_list_raw = input_list_raw.split()
 		input_list = []
 		for entry in ensure_list(input_list_raw):
+			if entry is None:
+				raise Exception('None found in input list!')
 			input_list.extend(ensure_list(entry))
 		def translate_str(value):
 			if isinstance(value, str):
@@ -573,7 +572,7 @@ class Context(object):
 					link_mode = 'direct_obj' # object input is only added once in direct link_mode
 				if link_mode == 'direct_obj':
 					yield obj
-			elif not isinstance(obj, BuildTarget):
+			elif isinstance(obj, BuildSource) and not isinstance(obj, BuildTarget):
 				yield obj
 			else:
 				raise Exception('%s: Unable to process input %s' % (build_name, repr(obj)))

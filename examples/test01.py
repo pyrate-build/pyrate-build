@@ -6,6 +6,15 @@ assert(pyrate_version == pyrate_version)
 
 match('*.cpp', recurse = True)
 exe = executable('test.bin', ['test.cpp'])
+exe = executable('test.bin', ['test.cpp'])
+try:
+	executable('test.bin', ['test.cpp', None])
+except Exception:
+	logging.critical('None found!')
+try:
+	executable('test.bin', ['test.cpp', version])
+except Exception:
+	logging.critical('Invalid input!')
 
 find_external('libc++')
 find_external('abcd')
@@ -31,4 +40,12 @@ try:
 	object_file('test.obj', ['test.cpp'])
 except Exception:
 	logging.critical('rule not found!')
+try:
+	find_rule('object', 'cpp')
+except Exception:
+	logging.critical('rule not found!')
+try:
+	find_internal('test.bin')
+except Exception:
+	logging.critical('multiple test.bins found!')
 assert(False)
