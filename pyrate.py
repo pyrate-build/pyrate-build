@@ -1364,8 +1364,8 @@ class NinjaBuildFileWriter(BuildFileWriter):
 		if self._vars.get(key) != value:
 			self._fp.write('%s = %s\n' % (key, value.strip()))
 		self._vars[key] = value
-	def write_default(self, default_targets):
-		if (len(default_targets) == 1) and (default_targets[0].name == 'all'):
+	def write_default(self, default_targets, all_targets):
+		if (len(default_targets) == 1) and (default_targets[0].name == 'all'): # ninja's default rule is all
 			return
 		self._fp.write('default %s\n' % str.join(' ', map(lambda t: t.name, default_targets)))
 	def write_rule(self, rule):
@@ -1394,7 +1394,9 @@ class MakefileWriter(BuildFileWriter):
 		self._vars = set()
 	def _write_var(self, key, value):
 		self._fp.write('%s := %s\n' % (key, value.strip()))
-	def write_default(self, default_targets):
+	def write_default(self, default_targets, all_targets):
+		all_targets = filter(lambda t: t.build_rule != phony_rule, all_targets)
+		self._fp.write('clean:\n\t@rm -f %s\n' % str.join(' ', map(lambda t: t.name, all_targets)))
 		default = default_targets[0].name
 		if len(default_targets) > 1:
 			default = 'default_target'
@@ -1442,7 +1444,7 @@ def process_build_output(name, targets, rules, default_targets, ofn = None):
 	writer = BuildFileWriter.available[name](ofn)
 	list(map(writer.write_rule, filter(lambda r: r != phony_rule, rules)))
 	list(map(writer.write_target, targets))
-	writer.write_default(default_targets)
+	writer.write_default(default_targets, targets)
 
 ################################################################################
 # Version support
