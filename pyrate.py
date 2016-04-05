@@ -1272,7 +1272,7 @@ def define_non_pkg_config_externals():
 	]:
 		create_build_helper_external(tool.split('-')[0].split('_')[0], tool,
 			link = ldopt, compile_cpp = cxxopt, version_query = '--version',
-			version_parser = lambda version_str: version_str.split()[-1])
+			version_parser = lambda version_str: version_str.split()[-1].replace('/', '.'))
 define_non_pkg_config_externals()
 
 ################################################################################
