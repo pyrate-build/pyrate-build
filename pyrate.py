@@ -402,7 +402,7 @@ class Context(object):
 	targets = []
 	install_targets = []
 
-	def __init__(self, registry, platform, tools, prefix, prefix_mode,
+	def __init__(self, registry, platform, tools, prefix, prefix_mode, # pylint:disable=too-many-locals
 			implicit_input = None,
 			implicit_object_input = None,
 			implicit_static_library_input = None,
@@ -1364,7 +1364,7 @@ class NinjaBuildFileWriter(BuildFileWriter):
 		if self._vars.get(key) != value:
 			self._fp.write('%s = %s\n' % (key, value.strip()))
 		self._vars[key] = value
-	def write_default(self, default_targets, all_targets):
+	def write_default(self, default_targets, all_targets): # pylint:disable=unused-argument
 		if (len(default_targets) == 1) and (default_targets[0].name == 'all'): # ninja's default rule is all
 			return
 		self._fp.write('default %s\n' % str.join(' ', map(lambda t: t.name, default_targets)))
