@@ -1,5 +1,6 @@
 ignore-paths:
   - examples
+  - conf.py
 pylint:
   disable:
     - too-many-arguments
