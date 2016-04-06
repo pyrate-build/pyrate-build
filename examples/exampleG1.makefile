@@ -18,4 +18,6 @@ exampleG1.bin: test.o foo.o
 
 all: exampleG1.bin
 .PHONY: all
+clean:
+	@rm -f test.o foo.o exampleG1.bin
 .DEFAULT_GOAL := all

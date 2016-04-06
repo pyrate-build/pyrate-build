@@ -24,4 +24,6 @@ install: /tmp/bin/example11.bin
 .PHONY: install
 all: example11.bin
 .PHONY: all
+clean:
+	@rm -f test.o foo.o example11.bin /tmp/bin/example11.bin
 .DEFAULT_GOAL := all
