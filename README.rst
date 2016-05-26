@@ -337,7 +337,7 @@ Examples for different build sources are:
 
 - any string that is given as build input is converted into an ``InputFile` - a ``BuildSource`` that
   forwards the specified file name to any rules (using ``on_use_inputs``)
-- ``External``s - are a type of ``BuildSource`` that specify ``on_use_variables`` among other things
+- ``External`` - is a type of ``BuildSource`` that specifies ``on_use_variables`` among other things
 - all targets are BuildSources as well - so the result of a ``shared_library`` call can be used to
   link another target against this libray
 - ``macro(expr)`` - creates a BuildSource that allows to define C/C++ preprocessor macros.
