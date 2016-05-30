@@ -345,9 +345,12 @@ Examples for different build sources are:
 Installing Targets
 ~~~~~~~~~~~~~~~~~~
 
-- ``install(target_list)``
+- ``install(target_list, destination = None)``
   This function will create install targets in the build file to install the given target / list of targets.
-  In particular an *install* target will be created that will contain all generated install targets.
+  In addition to the install targets for the specific entries in the ``target_list``, an *install* target 
+  will be created that will contain all generated install targets.
+  The parameter ``destination`` allows to specify the installation path - if it is not given, the path
+  is taken from the ``platform.install_paths`` dictionary with the appropriate object target type.
 
 Subdirectories
 ~~~~~~~~~~~~~~
