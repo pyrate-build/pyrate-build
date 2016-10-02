@@ -597,6 +597,8 @@ class Context(object):
 
 		link_input = self._get_link_input_list(build_name, input_list, implicit_input_list, link_mode,
 			linker_opts = kwargs.pop('linker_opts', None), compiler_opts = kwargs.pop('compiler_opts', None))
+		if target_type == 'static':
+			link_input = list(filter(lambda item: not isinstance(item, External), link_input))
 		target = self.create_target(build_name, rule = rule, input_list = list(link_input),
 			add_self_to_on_use_inputs = add_self_to_on_use_inputs,
 			target_type = target_type, **kwargs)
