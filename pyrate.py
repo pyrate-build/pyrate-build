@@ -1230,6 +1230,15 @@ class External_Python(SimpleExternal):
 External_Python.register_external('python')
 
 
+class External_ROOT(SimpleExternal):
+	def __init__(self, ctx, version = None, build_helper = 'root-config'):
+		self._check_version(version, run_process([build_helper, '--version'])[0].split()[-1].replace('/', '.'))
+		SimpleExternal.__init__(self, ctx, link = run_process([build_helper, '--libs'])[0],
+			compile_cpp = run_process([build_helper, '--cflags'])[0])
+		self._ctx = ctx
+External_ROOT.register_external('root')
+
+
 def create_build_helper_external(name, build_helper, **kwargs):
 	version_query = kwargs.pop('version_query', None)
 	version_parser = kwargs.pop('version_parser', None)
@@ -1269,7 +1278,6 @@ def define_non_pkg_config_externals():
 		('fltk-config',     '--ldflags', '--cxxflags'),
 		('llvm-config',     '--libs',    '--cppflags'),
 		('odbc_config',     '--libs',    '--cflags'),
-		('root-config',     '--libs',    '--cflags'),
 		('wx-config',       '--libs',    '--cxxflags'),
 	]:
 		create_build_helper_external(tool.split('-')[0].split('_')[0], tool,
