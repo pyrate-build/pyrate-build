@@ -1236,6 +1236,17 @@ class External_ROOT(SimpleExternal):
 		SimpleExternal.__init__(self, ctx, link = run_process([build_helper, '--libs'])[0],
 			compile_cpp = run_process([build_helper, '--cflags'])[0])
 		self._ctx = ctx
+
+	def dictionary(self, name, header_list = [], include_list = [], opts = None, context = None, **kwargs):
+		cint_rule = Rule(('c++.h', 'c++'), 'rootdict', 'rootcint -f $out ${include_opts} $in', 'rootcint $out', {})
+		include_opts = []
+		if include_list:
+			include_opts = add_rule_vars(include_opts = str.join(' ', map(lambda dn: '-I%s' % dn, include_list)))
+		return BuildTarget(get_normed_name(name, '.cpp'), cint_rule,
+			self._ctx.force_build_source(header_list) + include_opts + add_rule_vars(opts = opts),
+			on_use_inputs = {None: [SelfReference()]},
+			on_use_variables = self.on_use_variables,
+			target_type = 'cpp')
 External_ROOT.register_external('root')
 
 
