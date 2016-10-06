@@ -413,13 +413,23 @@ Currently the following builtin externals are supported (listed with all possibl
 - ``stdlibcpp`` - GNU C++ library
 - ``libcpp`` - LLVM C++ library
 
+- ``root`` - Library for large scale data analysis. This external also provides a member function `dictionary` to create ROOT I/O dictionary files.
+
+  * ``version`` - specifies required version (eg. ``version > '3.0.2'``)
+  * ``dictionary(self, name, header_list = None, include_list = None, opts = None, context = None, ...)`` -
+    ``name`` is the name of the generated c++ dictionary file, ``header_list`` is the list of header files
+    with the C++ objects for which the serialization code will be generated, ``include_list`` is a list
+    of include directories that are needed by the dictionary generator to parse the given header files,
+    ``opts`` are additional options given to rootcint,
+    ``context`` allows to specify a different build context, additional keyword parameters are forwarded to the shared_library
+    invokation that creates the wrapper library
+
 The following list contains all builtin externals with a single ``find_external`` parameter ``version``,
 that specifies the required version (eg. ``version >= 2.6``):
 
 - ``fltk`` - FLTK GUI Library
 - ``llvm`` - LLVM compiler infrastructure libraries
 - ``odbc`` - Open Database Connectivity middleware
-- ``root`` - Library for large scale data analysis
 - ``wx`` - wxWidgets GUI Toolkit
 
 Many more externals are available through the integration with ``pkg-config``. The full list
