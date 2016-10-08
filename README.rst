@@ -416,7 +416,7 @@ Currently the following builtin externals are supported (listed with all possibl
 - ``root`` - Library for large scale data analysis. This external also provides a member function `dictionary` to create ROOT I/O dictionary files.
 
   * ``version`` - specifies required version (eg. ``version > '3.0.2'``)
-  * ``dictionary(self, name, header_list = None, include_list = None, opts = None, context = None, ...)`` -
+  * ``dictionary(name, header_list = None, include_list = None, opts = None, context = None, ...)`` -
     ``name`` is the name of the generated c++ dictionary file, ``header_list`` is the list of header files
     with the C++ objects for which the serialization code will be generated, ``include_list`` is a list
     of include directories that are needed by the dictionary generator to parse the given header files,
