@@ -435,6 +435,16 @@ class Context(object):
 	def match(self, value, dn = '.', recurse = False):
 		return match(value = value, dn = os.path.join(self.prefix, dn), recurse = recurse)
 
+	def match_libs(self, dn = '.', recurse = False, lib_types = ['shared', 'static']):
+		result = []
+		for lib_type in lib_types:
+			for fn in self.match('*.%s' % self.platform.extensions[lib_type], dn = dn, recurse = recurse):
+				if lib_type == 'shared':
+					result.append(self.shared_library(fn))
+				elif lib_type == 'static':
+					result.append(self.static_library(fn))
+		return result
+
 	def get_basepath(self, basepath):
 		def pathjoin(value):
 			if self.prefix_mode and (self.prefix_mode.lower() == 'front'):
@@ -845,6 +855,7 @@ def run_build_file(bfn, ctx, user_env):
 		'include': default_ctx_call(exec_globals, Context.include),
 		'install': default_ctx_call(exec_globals, Context.install),
 		'match': default_ctx_call(exec_globals, Context.match),
+		'match_libs': default_ctx_call(exec_globals, Context.match_libs),
 		'object_file': default_ctx_call(exec_globals, Context.object_file),
 		'shared_library': default_ctx_call(exec_globals, Context.shared_library),
 		'static_library': default_ctx_call(exec_globals, Context.static_library),
