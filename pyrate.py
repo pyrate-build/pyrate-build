@@ -624,17 +624,19 @@ class Context(object):
 	def shared_library(self, lib_name, input_list = None, **kwargs):
 		install_name = get_normed_name(lib_name, self.platform.extensions['shared'])
 		link_name = os.path.basename(install_name.replace(self.platform.extensions['shared'], ''))
+		lib_path = os.path.dirname(lib_name) or '.'
 		if link_name.startswith('lib'):
 			link_name = link_name[3:]
 		if (input_list is None) and not kwargs:
 			if not os.path.exists(install_name):
 				raise Exception('Unable to create reference to shared library: %s does not exist!' % repr(install_name))
-			return RuleVariables(dict.fromkeys(['link_exe', 'link_shared'], {'opts': ['-l%s' % link_name]}))
+			return RuleVariables(dict.fromkeys(['link_exe', 'link_shared'], {'opts':
+				['-L%s' % lib_path, '-Wl,-rpath %s' % os.path.abspath(lib_path), '-l%s' % link_name]}))
 		if not input_list:
 			raise Exception('shared_library(%s) was defined with empty input list!' % repr(lib_name))
 		on_use_variables = kwargs.pop('on_use_variables', {})
 		on_use_variables.setdefault(None, {}).setdefault('opts', [])
-		on_use_variables[None]['opts'] += ['-L.', '-l%s' % link_name]
+		on_use_variables[None]['opts'] += ['-L%s' % lib_path, '-Wl,-rpath %s' % lib_path, '-l%s' % link_name]
 		on_use_deps = kwargs.pop('on_use_deps', {})
 		on_use_deps.setdefault(None, []).append(SelfReference())
 		build_name = os.path.join(self.get_basepath(self.basepath_shared_library), install_name)
