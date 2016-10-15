@@ -129,6 +129,12 @@ The selector ``'*.cpp -test*.cpp test3.cpp *.h'`` for example selects all files 
 ‘.h’ and ‘.cpp’, with the exception of those ‘.cpp’ files that start with ‘test’ and are not
 called ‘test3.cpp’.
 
+- ``match_lib(dn = '.', recurse = False, lib_types = ['shared', 'static'])``
+
+This functions allows to add all library files from a directory to the build process. By default,
+both shared and static libraries will be picked up, but this can be changed with the ``lib_types``
+option.
+
 Defining build targets
 ~~~~~~~~~~~~~~~~~~~~~~
 
