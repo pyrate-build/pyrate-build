@@ -25,5 +25,5 @@ build py_foo.o: compile_cpp py_foo.cpp
 build py_foo.cpp: swig_cpp_python foo.i
   module_name = py_foo
 build _py_foo.so: link_shared py_foo.o | libExample7.so
-  opts = -lpython2.7 -lpthread -ldl -lutil -lm -Xlinker -export-dynamic -L. -lExample7 -lstdc++ -lm
+  opts = -lpython2.7 -lpthread -ldl -lutil -lm -Xlinker -export-dynamic -L. -Wl,-rpath . -lExample7 -lstdc++ -lm
 build all: phony libExample7.so _py_foo.so

@@ -8,8 +8,8 @@ rule compile_cpp
 
 LINKER_EXE = clang
 LINKER_EXE_FLAGS = 
-rule link_exe_16c409c8b26da705e454cd7505817e43
-  command = $LINKER_EXE $LINKER_EXE_FLAGS -L. -lFoo -pthread -lstdc++ -lm -o $out $in
+rule link_exe_2f742ec86654a1516055390947fc3aa6
+  command = $LINKER_EXE $LINKER_EXE_FLAGS -L. -Wl,-rpath . -lFoo -pthread -lstdc++ -lm -o $out $in
   description = link(exe) $out
 
 LINKER_SHARED = clang
@@ -40,11 +40,11 @@ build mylib.o: compile_cpp mylib.cpp
 build mylib.cpp: swig_cpp_python foo.i
   module_name = mylib
 build _mylib.so: link_shared mylib.o | libFoo.so
-  opts = -lpython2.7 -lpthread -ldl -lutil -lm -Xlinker -export-dynamic -L. -lFoo -lstdc++ -lm
+  opts = -lpython2.7 -lpthread -ldl -lutil -lm -Xlinker -export-dynamic -L. -Wl,-rpath . -lFoo -lstdc++ -lm
 build test.o: compile_cpp test.cpp
   opts = -pthread
-build test.bin: link_exe_16c409c8b26da705e454cd7505817e43 test.o | libFoo.so
+build test.bin: link_exe_2f742ec86654a1516055390947fc3aa6 test.o | libFoo.so
 build test_cpp11.o: compile_cpp test_cpp11.cpp
   opts = -pthread
-build test_cpp11.bin: link_exe_16c409c8b26da705e454cd7505817e43 test_cpp11.o | libFoo.so
+build test_cpp11.bin: link_exe_2f742ec86654a1516055390947fc3aa6 test_cpp11.o | libFoo.so
 build all: phony libFoo.a libFoo.so _mylib.so test.bin test_cpp11.bin
