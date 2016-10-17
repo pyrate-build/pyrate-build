@@ -438,11 +438,11 @@ class Context(object):
 	def match_libs(self, dn = '.', recurse = False, lib_types = ['shared', 'static']):
 		result = []
 		for lib_type in lib_types:
-			for fn in self.match('*.%s' % self.platform.extensions[lib_type], dn = dn, recurse = recurse):
+			for fn in self.match('*%s' % self.platform.extensions[lib_type], dn = dn, recurse = recurse):
 				if lib_type == 'shared':
-					result.append(self.shared_library(fn))
+					result.append(self.shared_library(os.path.join(dn, fn)))
 				elif lib_type == 'static':
-					result.append(self.static_library(fn))
+					result.append(self.static_library(os.path.join(dn, fn)))
 		return result
 
 	def get_basepath(self, basepath):
