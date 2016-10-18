@@ -1244,9 +1244,9 @@ External_Python.register_external('python')
 
 
 class External_ROOT(SimpleExternal):
-	def __init__(self, ctx, version = None, build_helper = 'root-config'):
+	def __init__(self, ctx, version = None, build_helper = 'root-config', link_opts = ''):
 		self._check_version(version, run_process([build_helper, '--version'])[0].split()[-1].replace('/', '.'))
-		SimpleExternal.__init__(self, ctx, link = run_process([build_helper, '--libs'])[0],
+		SimpleExternal.__init__(self, ctx, link = run_process([build_helper, '--libs'])[0] + ' ' + link_opts,
 			compile_cpp = run_process([build_helper, '--cflags'])[0])
 		self._ctx = ctx
 
