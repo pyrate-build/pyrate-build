@@ -1489,6 +1489,14 @@ class VersionError(Exception):
 	pass
 
 
+def _parse_version_str(value):
+	if value.isdigit():
+		return int(value)
+	elif value.isalpha():
+		return ord(value.lower()) - ord('a')
+	assert(False)
+
+
 class Version(object):
 	def __init__(self, value):
 		try:
@@ -1496,10 +1504,10 @@ class Version(object):
 				value = value.value
 			if isinstance(value, (list, tuple)): # (1,32,5)
 				value = list(value)
-			elif isinstance(value, str): # '1.32.5'
-				value = list(map(int, value.split('.')))
-			else:
-				value = list(map(int, str(value).split('.'))) # 1.32
+			elif isinstance(value, (float, int)): # 1.32
+				value = list(map(int, str(value).split('.')))
+			else: # '1.32.5'
+				value = list(map(_parse_version_str, value.split('.')))
 		except Exception:
 			raise VersionError('unable to parse version string %s' % repr(value))
 		self.value = tuple(value + [0] * (4 - len(value)))
