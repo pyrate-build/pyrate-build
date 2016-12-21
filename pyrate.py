@@ -1293,8 +1293,11 @@ def define_pkg_config_external(name):
 		run_process(['pkg-config', name, '--exists'])
 	except ProcessError:
 		return
+	version_parser_dict = {
+		'openssl': lambda version_str: version_str[:-1] + '.' + version_str[-1],
+	}
 	return create_build_helper_external(name, 'pkg-config',
-		version_query = '%s --modversion' % name,
+		version_query = '%s --modversion' % name, version_parser = version_parser_dict.get(name),
 		link = '%s --libs' % name, compile_cpp = '%s --cflags' % name)
 
 
