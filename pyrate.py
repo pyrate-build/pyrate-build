@@ -483,7 +483,8 @@ class Context(object):
 
 	def find_external(self, name, *args, **kwargs):
 		name = name.lower()
-		if name not in External.available and not define_pkg_config_external(name):
+		version_parser = kwargs.pop('version_parser', None)
+		if name not in External.available and not define_pkg_config_external(name, version_parser):
 			sys.stderr.write('Unknown external %r\n' % name)
 			return
 		try:
@@ -1288,7 +1289,7 @@ def create_build_helper_external(name, build_helper, **kwargs):
 	return TempExternal
 
 
-def define_pkg_config_external(name):
+def define_pkg_config_external(name, version_parser = None):
 	try:
 		run_process(['pkg-config', name, '--exists'])
 	except ProcessError:
@@ -1296,8 +1297,9 @@ def define_pkg_config_external(name):
 	version_parser_dict = {
 		'openssl': lambda version_str: version_str[:-1] + '.' + version_str[-1],
 	}
+	version_parser = version_parser or version_parser_dict.get(name)
 	return create_build_helper_external(name, 'pkg-config',
-		version_query = '%s --modversion' % name, version_parser = version_parser_dict.get(name),
+		version_query = '%s --modversion' % name, version_parser = version_parser,
 		link = '%s --libs' % name, compile_cpp = '%s --cflags' % name)
 
 
