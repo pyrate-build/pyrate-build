@@ -435,9 +435,9 @@ class Context(object):
 	def match(self, value, dn = '.', recurse = False):
 		return match(value = value, dn = os.path.join(self.prefix, dn), recurse = recurse)
 
-	def match_libs(self, dn = '.', recurse = False, lib_types = ['shared', 'static']):
+	def match_libs(self, dn = '.', recurse = False, lib_types = None):
 		result = []
-		for lib_type in lib_types:
+		for lib_type in (lib_types or ['shared', 'static']):
 			for fn in self.match('*%s' % self.platform.extensions[lib_type], dn = dn, recurse = recurse):
 				if lib_type == 'shared':
 					result.append(self.shared_library(os.path.join(dn, fn)))
